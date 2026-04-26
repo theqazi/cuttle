@@ -187,3 +187,98 @@ C. Stricter version: any disable = full refutation. Brittle; does not distinguis
 - PRD gains new §12 (sealed falsifier pre-registration) per session-1 drift register item 9.
 - Dogfood instrumentation requirement: the audit log must capture gate-disable events with reason codes so the falsifier predicate can be evaluated mechanically post-week, not by recall.
 - Sealing discipline: per `framework_development_methodology.md:39-43`, the falsifier becomes immutable at v0.1 ship; refinements between now and ship are permitted.
+
+---
+
+## D-2026-04-26-07: §6.1.1 implementation-detail commitments softened to defer-to-TDD
+
+| Field   | Value                                                                                                                              |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                                         |
+| Status  | Accepted                                                                                                                           |
+| Source  | `docs/output-quality-prd-v1.md` OQ-FIX-1; `docs/threat-model-prd-v1.md` T-005 (sandbox-exec deprecation); T-003 (audit-log scheme) |
+| Affects | `docs/PRD.md` §6.1.1 (Substrate), §10 (Open questions: OQ-3, OQ-4)                                                                 |
+
+**Context**: PRD v1 §6.1.1 silently committed to specific implementation primitives (HMAC chain for audit-log tamper-evidence; `sandbox-exec` for bash sandbox) while §10 still listed both as open questions (OQ-3, OQ-4). Output-quality flagged the contradiction as PRD-vs-TDD scope discipline failure. Threat-model flagged sandbox-exec as on Apple's deprecation path; HMAC chain as operator-keyed (anti-Sybil-weak in single-operator scope).
+
+**Options considered**:
+A. Resolve OQ-3 and OQ-4 in §10, removing them as open. Locks the choices early; closes options before TDD has explored them.
+B. Soften §6.1.1 to defer-to-TDD-with-leading-candidates. Keeps OQ-3 and OQ-4 open; PRD declares the requirement (tamper-evident chain; macOS process-isolation primitive) and TDD picks the scheme.
+C. Strike the bullets entirely. Leaves the substrate underspecified; loses the "v0.1 ships THIS surface" clarity that SC-3 / SC-4 / SC-5 depend on.
+
+**Decision**: B. PRD declares what surface ships and what invariant it satisfies; TDD picks the primitive. The PRD wording becomes "tamper-evident chain (specific scheme is OQ-4)" and "macOS process-isolation primitive scoped to project working directory; primitive choice is OQ-3." Leading candidates remain named so TDD has a starting point.
+
+**Consequences**:
+
+- §6.1.1 audit-log bullet softened; OQ-4 stays open in §10.
+- §6.1.1 sandbox bullet softened; OQ-3 stays open in §10. T-005 (Apple deprecation) explicitly cross-referenced; TDD §4 must produce a contingency.
+- §9 Constraints text already names sandbox-exec; left as-is because it's framed as the rationale for "macOS-first" not as a v0.1 commitment. (Re-evaluate at PRD v1.2.)
+- This is a pure scope-discipline correction; no security guarantee changes hands.
+
+---
+
+## D-2026-04-26-08: Trust-boundary tightening from threat-model PRD-grain CRITICAL findings
+
+| Field   | Value                                                                                                                                                                                                  |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Date    | 2026-04-26                                                                                                                                                                                             |
+| Status  | Accepted                                                                                                                                                                                               |
+| Source  | `docs/threat-model-prd-v1.md` (4 CRITICAL: T-001, T-002, T-007, T-009; T-004; T-010; CC-1; CC-2)                                                                                                       |
+| Affects | `docs/PRD.md` §6.1.1 (Substrate), §6.1.2 row L5 (registry), §6.1.5 (cross-cutting invariants), §8 case 1 (skill prompt-injection), §8 case 6 (nested harness); `docs/falsifiers.md` indirectly via §12 |
+
+**Context**: Threat-model produced 4 PRD-grain CRITICAL findings plus 3 cross-cutting requirements gaps that v1 did not declare. Each finding traces to a load-bearing security property the v1 PRD assumed but did not specify, allowing implementation to pick silently. Umbrella entry rather than 8 micro-entries because the findings share a structural shape: "v1 declared a boundary; v1.1 specifies what enforces the boundary."
+
+**Options considered**:
+A. One DECISIONS entry per finding (T-001..T-010, CC-1, CC-2 = 8 entries). Each has full context/options/decision/consequences. Highest provenance fidelity; substantial doc bloat.
+B. Single umbrella entry referencing the threat-model artifact for the per-finding detail (D-08 covers all 8). Provenance preserved by cross-link to threat-model doc; DECISIONS stays scannable.
+C. Group by trust boundary (credential vault entry, policy gate entry, memory entry, attestation entry). Middle-ground; harder to pattern-match against the threat-model artifact.
+
+**Decision**: B. The threat-model doc is the authoritative per-finding record; DECISIONS captures the umbrella architectural commitment that the v1 was missing those guarantees and v1.1 adds them.
+
+**Specific guarantees added in v1.1** (each cited in PRD with `(per T-XXX, D-2026-04-26-08)`):
+
+1. **Policy gate fails closed on gate-process death** (CC-1). PRD §6.1.1 new bullet. Gate panic / crash halts all tool dispatch until restart; no fallback to "execute without gate."
+2. **API key in-memory zeroization on session end and panic** (CC-2). PRD §6.1.1 credential-vault bullet. Constrains OQ-1 language choice (Rust `zeroize` viable; TS not viable for this surface without native bindings).
+3. **apiKeyHelper script content-hash pinned, sandboxed network egress** (T-002). PRD §6.1.1 credential-vault bullet. Helper hash recorded in `CredentialRecord`; mismatch refuses invocation. Helper runs under sandbox-exec profile denying network egress except to documented credential endpoints. Helper is opt-in only.
+4. **Cross-session memory presented as untrusted-by-default; quarantine workflow** (T-007). PRD §6.1.1 auto-memory bullet + §6.1.5 new invariant. Model writes land in quarantine; promotion to canonical sidecar requires TTY operator confirmation.
+5. **Exception tables operator-runtime-loaded, not distributed, not model-readable** (T-009). PRD §6.1.5 escape-hatch invariant updated. Ship empty by default; operator populates per-project.
+6. **Attestation provenance separation: TTY input vs model emit** (T-001). PRD §6.1.5 new invariant + §8 case 1 critical refinement. Gate-bypass predicates require operator-typed attestation; model-emitted text rejected as evidence.
+7. **Nested-harness detection uses out-of-band signals, fail-closed on inheritance failure** (T-004). PRD §8 case 6 refined. Lockfile + process-tree walk, not env-vars alone.
+8. **Reward-loop registry writes go through operator review queue with signed provenance** (T-010). PRD §6.1.2 row L5 updated. LEARN proposes; promotion requires TTY confirmation; each mutation carries session ID, model-output trigger, score, confirmation timestamp.
+
+Audit-log integrity acknowledgment (T-003): the audit log is anti-forgetfulness and anti-drift, NOT anti-Sybil against the operator-as-adversary in v0.1 single-operator scope. PRD §6.1.1 audit-log bullet says so explicitly. F-Cuttle-DISABLE expanded (per D-2026-04-26-09) to count chain-rotation events.
+
+**Consequences**:
+
+- 8 distinct PRD requirements added or sharpened in v1.1.
+- TDD scope grows: §2 (config) gains apiKeyHelper hash extension; §3 (policy gate) gains TTY-vs-model-emit primitive, supervisor/restart contract, registry review queue, nested-harness lockfile; §4 (sandbox) gains apiKeyHelper sandbox profile; §5 (audit log) gains attestation-provenance field, tamper-chain scheme decision; §6 (memory) gains quarantine layout.
+- v0.1 implementation language constraint tightens (CC-2 zeroization).
+- Some of these guarantees are operationally observable; F-Cuttle-DISABLE / F-Cuttle-MEMORY-DRIFT (per D-2026-04-26-09) become live monitors.
+
+---
+
+## D-2026-04-26-09: Pipeline expansion (privacy skill in REVIEW-2; falsifier set additions)
+
+| Field   | Value                                                                                                                       |
+| ------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                                  |
+| Status  | Accepted                                                                                                                    |
+| Source  | `docs/threat-model-prd-v1.md` CC-3, T-006, T-007; `docs/output-quality-prd-v1.md` OQ-FIX-5 (telemetry-ACL forward-ref)      |
+| Affects | `docs/PRD.md` §11 (Pipeline), §12 (Sealed falsifier pre-registration), §6.1.6 (telemetry surface ACL + privacy forward-ref) |
+
+**Context**: Two strands collapse into one entry: (a) the v1 §11 pipeline omitted `privacy` skill, but v1 §6.1.6 ships `cuttle telemetry` (workflow-shape data) and §6.1.1 audit log captures content digests, both of which trigger `privacy` per global CLAUDE.md mandatory-skills table. (b) The v1 §12 falsifier set covered the bedrock thesis (F-Cuttle-DISABLE, F-Cuttle-BEDROCK, F-Cuttle-SUBSTRATE, F-Cuttle-OPTION-C) but did not cover the L1 snapshot mechanic or the cross-session memory promotion mechanic, both of which are load-bearing for v1.1's new invariants.
+
+**Options considered**:
+A. Add `privacy` to §11 only; leave falsifier set unchanged. Closes the pipeline gap but leaves the new v1.1 invariants without falsifier predicates.
+B. Add `privacy` to §11 + add F-Cuttle-SNAPSHOT-DRIFT and F-Cuttle-MEMORY-DRIFT to §12 + expand F-Cuttle-DISABLE to cover audit-log chain re-keying. Closes both gaps in one revision pass.
+C. Defer falsifier additions to TDD. Violates the framework's pre-seal-before-v0.1-ship discipline; falsifiers should be PRD-grain so they can be sealed at the end of the PRD pipeline.
+
+**Decision**: B. Both gaps are PRD-grain; both close cleanly in v1.1. Privacy skill added to REVIEW-2 step in §11 step 3, scoped to telemetry surface (§6.1.6), audit-log content digests (§6.1.1), and cross-session memory promotion (§6.1.5). Falsifier set in §12 grows by 2 (F-Cuttle-SNAPSHOT-DRIFT, F-Cuttle-MEMORY-DRIFT) and F-Cuttle-DISABLE expands per D-2026-04-26-08.
+
+**Consequences**:
+
+- PRD §11 step 3 lists privacy alongside legal-review and threat-model.
+- PRD §12 grows to 6 first-draft falsifier predicates (was 4).
+- PRD §6.1.6 forward-refs to §11 step 3 (privacy review) and to TDD §5 (aggregation requirement).
+- Privacy skill becomes a Cuttle-pipeline obligation, not just a global mandatory-skill trigger.
+- N, M, R thresholds for the new falsifiers set in TDD §3.
