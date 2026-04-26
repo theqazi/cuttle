@@ -1,0 +1,19 @@
+[package]
+name = "cuttle-falsifiers"
+version = "0.0.7"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle falsifier-evaluation: scan audit log for sealed-falsifier predicate evidence. Per docs/falsifiers.md + TDD §3.9 + §5.6 + BP-02 partial close."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+cuttle-audit = { path = "../cuttle-audit" }
+
+[dev-dependencies]
+tempfile.workspace = true
+rand.workspace = true

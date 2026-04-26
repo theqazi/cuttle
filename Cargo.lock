@@ -131,6 +131,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuttle-falsifiers"
+version = "0.0.7"
+dependencies = [
+ "cuttle-audit",
+ "rand",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "cuttle-gate"
 version = "0.0.1"
 dependencies = [
