@@ -363,3 +363,55 @@ C. Build a new §15 "External corroboration" listing all three independent voice
 - New PRD §15 "External corroboration" lists Carlos, Mohan/Gumbley, Ford/Parsons/Kua with one-line summary each.
 - Framework-side: `framework_external_corroboration.md` sidecar (handoff path #4) becomes the canonical home for this list as it grows. Cuttle's §15 is a snapshot; the framework sidecar is the live record.
 - Cuttle's claim register: "novel substrate-native form of an industry-converged principle." Even narrower than D-01's "novel application." Defensibility increases.
+
+---
+
+## D-2026-04-26-13: PRD v1.3 incorporates adversarial-review findings (umbrella)
+
+| Field   | Value                                                                                                                                                                            |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                                                                                       |
+| Status  | Accepted                                                                                                                                                                         |
+| Source  | `docs/adversarial-review-prd-v1.2.md` (Wolverine + Black Panther, Step 8 of threat-model skill against PRD v1.2)                                                                 |
+| Affects | `docs/PRD.md` §6.1.1 (audit-log + skills-loader + credential-vault), §6.1.2 row L5, §6.1.5, §8 case 9, §10 OQ-11 + OQ-12, §12 + F-Cuttle-FATIGUE, §15 dissenting-precedents note |
+
+**Context**: PRD v1.2 closed all 4 v1 CRITICAL findings + 3 cross-cuts at PRD-grain and hardened them via §6.1.5 domain primitives. Per Mo's session-4 expansion ("don't stop until interrupted; PRD then implementation if it makes sense; use judgment"), the judgment-call gate at handoff v0.6 path #1 chose adversarial review over Karpathy review at this grain: v1.2 is dense and externally-anchored, so adversarial attack tests defensibility while Karpathy adds another corroborating voice. Adversarial dominates. Wolverine + Black Panther personas executed Step 8 of the threat-model skill against PRD v1.2 directly.
+
+**Findings summary** (full per-finding detail in `docs/adversarial-review-prd-v1.2.md`):
+
+- **3 CRITICAL** (re-opened or expanded v1.2 closures): WV-06 attestation provenance reduces to operator-fatigue-keypress (re-opens T-001 at composite 21); WV-07 memory-quarantine social-eng bypass (re-opens T-007 at 17); WV-03 audit-log content digest as fingerprint side-channel for secret-bearing tool outputs (expands T-008 at 15).
+- **2 PRD-grain High**: WV-05 skills-loader strip-list maintenance contract; WV-04 reward-loop registry signing-key disclaimer.
+- **2 TDD-deferred** (cross-linked but not closed in v1.3): WV-01 constructor authorization; WV-02 lockfile TOCTOU.
+- **6 PRD-grain structural / framing**: BP-01 single-process compromise → new OQ-11; BP-02 fitness-functions aspirational at v0.1 → §12 hedge; BP-03 cherry-picked corroboration → §15 dissent note; BP-04 backup/restore unmodeled → new §8 case 9; BP-05 Keychain prompt-fatigue → §6.1.1 ack; BP-06 PII in audit log → new OQ-12; BP-07 cross-domain framing → §15 wording.
+
+**Options considered**:
+A. Apply all 14 findings as PRD v1.3 edits. Includes implementation-grain detail (constructor authorization, lockfile authentication mechanism).
+B. Triage. PRD-grain findings → v1.3; implementation-grain findings → cross-link to TDD-grade scope. (Chosen.)
+C. Defer adversarial findings to v2 along with Karpathy. Loses the chance to harden v1.3 before pruning to v3.
+
+**Decision**: B. 10 findings warrant PRD v1.3 edits (3 CRITICAL + 2 High + 5 structural/framing); 2 are TDD-deferred with cross-link in v1.3 §6.1.5 + §8. The most load-bearing edit is the §6.1.5 attestation-provenance LIMITATION DISCLAIMER: TTY-provenance separation distinguishes bytes-typed-by-operator from bytes-emitted-by-model but does NOT distinguish operator-INTENT from operator-FATIGUE-KEYPRESS. F-Cuttle-FATIGUE in §12 makes this empirically falsifiable. This is honest framing per `framework_development_methodology.md:18-30`; v1.3 narrows v1.2's "type system does the work" claim to "type system does the work for bytes-provenance, not for operator-intent."
+
+**Specific guarantees added in v1.3** (each cited in PRD with `(per WV-XX or BP-XX, D-2026-04-26-13)`):
+
+1. **Audit-log tool-output digest taint annotation** (WV-03). §6.1.1 audit-log bullet: per-tool `secret_bearing` flag; for tagged tools, only metadata (length, type, success/failure) recorded, NOT content sha256. Default-treat-unknown-tools-as-secret-bearing.
+2. **Skills-loader strip-list allowlist-shaped + fail-closed on unknown Unicode** (WV-05). §6.1.1 skills-loader bullet: skills containing characters outside known-safe Unicode categories fail to load rather than load-with-stripping.
+3. **Keychain prompt-fatigue acknowledgment** (BP-05). §6.1.1 credential-vault bullet: Keychain rate-budget; alternative when budget exceeded; named cross-purposes with CC-1 fail-closed.
+4. **Reward-loop registry signing-key disclaimer** (WV-04). §6.1.2 row L5: signing key is operator-owned; chain is anti-forgetfulness/anti-drift, NOT anti-Sybil (symmetric to T-003 audit-log disclaimer).
+5. **Attestation-provenance limitation disclaimer** (WV-06, WV-07). §6.1.5: explicitly disclaims TTY-provenance does not solve operator-fatigue-keypress; F-Cuttle-FATIGUE in §12 makes empirically falsifiable.
+6. **Constructor authorization** (WV-01). §6.1.5 domain-primitives invariant extended: each primitive's constructor is module-private with capability scoping. Untrusted-or-low-trust modules pass raw bytes through validating boundary functions.
+7. **Backup/restore as trust boundary** (BP-04). New §8 case 9: state-coherence file at clean shutdown; mtime/chain-head mismatch refuses startup without explicit `--restored-from-backup` operator acknowledgment.
+8. **OQ-11 process-isolation model** (BP-01). New OQ in §10: should the policy gate run as a separate OS process supervising the model client over typed IPC? TDD §3, revisit at v0.2 latest.
+9. **OQ-12 audit-log PII posture** (BP-06). New OQ in §10: record-as-is vs redact-at-write vs refuse-tools-that-may-emit-PII. Resolved by TDD §5 + privacy review.
+10. **Fitness-functions aspirational hedge** (BP-02). §12 introduction: predicates are data only at v0.1 ship; the AUTOMATED EVALUATOR is TDD-grade scope. The "fitness function" framing is operationally true at v0.2+ when the eval machinery lands.
+11. **§15 dissenting-precedents note** (BP-03 + BP-07). New paragraph naming the cross-domain extrapolation explicitly + dissenting precedents (Lampson capability discipline; Mickens/Geer operator-fatigue inevitability).
+12. **F-Cuttle-FATIGUE seeded** (WV-06 + WV-07). §12: substring-match-rate predicate against model-emitted text in same conversation turn.
+
+**Consequences**:
+
+- 12 distinct PRD requirements added or sharpened in v1.3.
+- TDD scope grows: §2 capability-scoping for domain-primitive constructors; §3 attestation UX research, Keychain rate-budget, lockfile authentication mechanism; §5 tool-registration tagging contract for audit-log digest, fitness-function automated evaluator, audit-log PII posture (OQ-12).
+- v0.1 implementation tightens: OQ-11 process isolation may push v0.1 to multi-process; OQ-12 PII posture may force tool-registration tagging upfront.
+- New falsifier predicate: F-Cuttle-FATIGUE. v0.1 falsifier set now 7 predicates.
+- Cuttle's contribution claim further narrowed: substrate-native form of converged principle, with HONEST DISCLAIMER that operator-fatigue at the per-attestation grain is not solved in v0.1.
+
+The artifact `docs/adversarial-review-prd-v1.2.md` is the per-finding source; this DECISIONS entry is the umbrella commit.
