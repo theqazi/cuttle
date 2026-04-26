@@ -1,0 +1,25 @@
+[package]
+name = "cuttle-rewardloop"
+version = "0.0.6"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle reward-loop registry: AP/VP entries with operator-review queue + signed provenance. Per docs/TDD.md §3 + T-010 / D-22 / WV-04."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+cuttle-gate = { path = "../cuttle-gate" }
+cuttle-memory = { path = "../cuttle-memory" }
+
+[dev-dependencies]
+tempfile.workspace = true
+rand.workspace = true

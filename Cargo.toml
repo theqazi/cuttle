@@ -8,6 +8,7 @@ members = [
     "crates/cuttle-audit",
     "crates/cuttle-memory",
     "crates/cuttle-skills",
+    "crates/cuttle-rewardloop",
 ]
 
 [workspace.package]
