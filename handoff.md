@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.8 (after session 4 PRD v3 (pruning) + sealed falsifiers, 2026-04-26)
+**Version**: handoff-0.9 (after session 4 TDD v0 complete + v0.0.1 implementation scaffolding, 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -22,20 +22,36 @@ implementation existence proof, not an effect claim.
 
 ## State at end of session 4 (2026-04-26)
 
-- **Repository**: `/Users/m0qazi/cuttle`. 16 commits on `main` (latest five from session 4 part 5):
+- **Repository**: `/Users/m0qazi/cuttle`. 22 commits on `main`:
   - `16bc70e` seed (sessions 1-2)
   - Part 1 (PRD v1 baseline + reviews + handoff v0.4): `23455db`, `2860f18`, `205f151`
   - Part 2 (PRD v1.1 + delta + handoff v0.5): `b1913eb`, `527a399`, `7880da1`
   - Part 3 (PRD v1.2 Fowler + delta + handoff v0.6): `5c0a741`, `68b40be`, `e863c16`
   - Part 4 (adversarial review + PRD v1.3 + delta + handoff v0.7): `3f739ef`, `a8fa349`, `db09b8c`, `baa0dc9`
-  - Part 5 (PRD v3 pruning + sealed falsifiers + delta): `4f0ffbb`, `2ce8b1b`, `a9252c6`
+  - Part 5 (PRD v3 pruning + sealed falsifiers + delta + handoff v0.8): `4f0ffbb`, `2ce8b1b`, `a9252c6`, `b38aaa4`
+  - Part 6 (TDD v0 complete: §1..§6 + DECISIONS D-15..31): `389edb7`, `9c88cf2`, `f1c6d02`, `045b4ce`
+  - Part 7 (v0.0.1 implementation scaffolding: workspace + 3 crates): `67ba1a3`
     Working tree clean modulo this handoff update.
 - **PRD v3** at `docs/PRD.md` (committed `4f0ffbb`; v1.3 at `a8fa349`; v1.2 at `5c0a741`; v1.1 at `b1913eb`; v1 at `23455db`; v0 at `docs/archive/PRD-v0-2026-04-25.md`). v3 = post-pruning of v1.3 (= v2 per §11 versioning convention). 319 lines (was 336 in v1.3). All PRD-grain commitments preserved verbatim per `docs/threat-model-prd-v3-delta.md` audit; pruning targeted redundant cross-references and the §11 convention text. v3 is the seal candidate; FIX-DOCS at end of REVIEW-1 + REVIEW-2 produces the Accepted version. **Sealed-falsifier pre-registration** at `docs/falsifiers.md` (committed `2ce8b1b`) in pre-seal-draft state with all 7 predicates (F-Cuttle-DISABLE / BEDROCK / SUBSTRATE / OPTION-C / SNAPSHOT-DRIFT / MEMORY-DRIFT / FATIGUE) structurally locked; threshold refinements permitted up to v0.1 ship.
-- **Decision log** at `docs/DECISIONS.md` (committed). ADR-lite format. 14 entries:
+- **Decision log** at `docs/DECISIONS.md` (committed). ADR-lite format. 31 entries:
   D-01..06 (Carlos) + D-07..09 (v1.1) + D-10..12 (v1.2 Fowler) + D-13 (v1.3
-  adversarial-review umbrella) + D-14 (v3 pruning umbrella). Convention: handoff
-  carries session-1 decision headlines (below); DECISIONS.md carries entries from
-  2026-04-26 onward with full structure (context/options/decision/consequences).
+  adversarial umbrella) + D-14 (v3 pruning umbrella) + D-15..31 (TDD §1-§6
+  decisions). Convention: handoff carries session-1 decision headlines (below);
+  DECISIONS.md carries entries from 2026-04-26 onward with full structure
+  (context/options/decision/consequences).
+- **TDD v0** at `docs/TDD.md` (committed across `389edb7`, `9c88cf2`, `f1c6d02`,
+  `045b4ce`; ~1080 lines). Resolves 8 of 12 OQs at TDD-grain. §1 Rust language
+  choice (D-15) with full reasoning; §2 config + 6 domain primitives + capability
+  tokens; §3 policy gate (workspace structure, supervisor + restart, IPC schema,
+  Allow/Warn/Deny graduation, imperative plug-ins, predicate maintenance, lockfile
+  HMAC, Keychain rate-budget, falsifier threshold refinement); §4 sandbox; §5
+  audit log + tool-tagging + state-coherence + PII posture; §6 memory + quarantine.
+- **v0.0.1 implementation scaffolding** at `Cargo.toml` + `crates/` (committed
+  `67ba1a3`). Cargo workspace pinned to Rust 1.95 stable + 7 workspace deps + release
+  panic=abort. Three crates: `cuttle-credential` (ApiKey + HelperHash + CredentialRecord;
+  9 tests pass); `cuttle-gate` (AttestationBody + TtyInputCap + Decision; 7 tests pass);
+  `cuttle-input` (Session that mints TtyInputCap; 1 test passes). 17/17 tests pass;
+  cargo clippy --all-targets -- -D warnings clean.
 - **Process artifacts** (three-layer discipline: source preservation):
   `process/carlos-arguelles-input.md` (161 lines, committed `23455db`) preserves
   Carlos Arguelles articles. `process/martin-fowler-input.md` (committed `5c0a741`)
@@ -63,52 +79,82 @@ implementation existence proof, not an effect claim.
   feedback rules learned in session 4 (existing rules executed cleanly: decisive
   execution, save-memory-at-intervals, handoff-between-context-switches all
   applied).
-- **No code, no tests, no architecture diagrams, no TDD.** Pipeline still gated
-  on PRD reaching v3 (post-adversarial-review + post-pruning) per global CLAUDE.md
-  SYSTEM-tier ceremony.
+- **First Rust code lands** in `crates/cuttle-credential`, `crates/cuttle-gate`,
+  `crates/cuttle-input` per v0.0.1 scaffolding above. 17/17 tests pass; cargo
+  clippy clean. The type-system enforcement of T-001 attestation-provenance
+  separation, T-002 helper-hash binding, CC-2 zeroization, D-17 capability-token
+  witness pattern is now demonstrable in compiling code.
+- **9 of 12 v0.1 crates pending**: `cuttle-runtime`, `cuttle-anthropic`,
+  `cuttle-sandbox`, `cuttle-audit`, `cuttle-telemetry`, `cuttle-memory`,
+  `cuttle-skills`, `cuttle-rewardloop`, `cuttle-falsifiers`, `cuttle-cli`.
+- **No architecture diagrams** (DESIGN step pending REVIEW-1 + REVIEW-2).
 
 ## Where to resume
 
 Three paths. Path 1 (TDD) is on the critical path to implementation; paths 2 + 3 are parallel-stream and can run before, during, or after path 1.
 
-### 1. TDD start (IMMEDIATE)
+### 1. v0.0.x crate scaffolding continuation (IMMEDIATE)
 
-Promoted from path #4 in handoff-0.7 after PRD v3 + sealed falsifiers closed
-the prior path #1 (commits `4f0ffbb` + `2ce8b1b` + `a9252c6`). PRD v3 is the
-seal candidate; the next critical-path step toward implementation is the TDD.
+Promoted from path #4 (TDD start) after TDD v0 + v0.0.1 scaffolding closed the
+prior path #1 (commits `389edb7`..`045b4ce` + `67ba1a3`). 3 of 12 v0.1 crates
+shipped; 9 remaining. Suggested next-up order (highest TDD-coverage value first):
 
-Resolve OQ-1 through OQ-6, OQ-9, OQ-11, OQ-12 (per PRD v3 §10). Suggested
-section structure:
+- **`cuttle-runtime` (v0.0.2)**: `LockfilePath` domain primitive (T-004 / D-23
+  HMAC + parent-PID + signing-key-in-memory); `TierClassification` enum (L2
+  mechanic); session orchestration skeleton; state-coherence.json read-at-start
+  invariant (BP-04 / D-29 two-fence).
+- **`cuttle-audit` (v0.0.3)**: HMAC chain implementation (D-27); `AuditEntry` +
+  `AuditChain` + `sync_data()` per entry; `ToolRegistry` with `secret_bearing`
+  safe-by-default (D-28); state-coherence.json self-HMAC writer; `Redactor` trait
+  for PII (D-30).
+- **`cuttle-memory` (v0.0.4)**: `OperatorAuthoredText` vs `ModelAuthoredText`
+  newtypes (D-17 + T-007); promotion workflow with `&TtyInputCap` requirement
+  (D-31); canonical/quarantine filesystem layout.
+- **`cuttle-sandbox` (v0.0.5)**: SBPL profile generation (D-26); resource limits
+  via tokio `pre_exec`; T-005 contingency stubs.
+- **`cuttle-anthropic` (v0.0.6)**: thin client over reqwest + serde +
+  eventsource-stream (D-15 supply-chain decision); streaming, retry, prompt-cache.
+- **`cuttle-skills` (v0.0.7)**: skills loader with Unicode allowlist + fail-closed
+  on novel category (WV-05).
+- **`cuttle-rewardloop` (v0.0.8)**: AP/VP registry with operator-review-queue
+  promotion + signed provenance (D-22 + T-010 + WV-04).
+- **`cuttle-falsifiers` (v0.0.9)**: data-collection side of the 7 sealed
+  predicates; `cuttle telemetry --falsifier-eval` runner.
+- **`cuttle-telemetry` (v0.0.10)**: `cuttle telemetry` CLI; on-demand audit-log
+  scan; aggregation contract per D-04 + D-09.
+- **`cuttle-cli` (v0.0.11)**: top-level `cuttle` bin; argument parsing; wires
+  the runtime; brings everything together for first end-to-end smoke test.
 
-- **TDD §1: Language choice (OQ-1).** PRD v3 §9 already leans Rust > Go > TS
-  (CC-2 zeroization + §6.1.5 nominal-type domain primitives). Rust is the
-  defensible default unless Mo signals otherwise.
-- **TDD §2: Config + data model (OQ-6).** Domain-primitive enumeration per v3
-  §6.1.5 candidates (`ApiKey`, `AttestationBody`, `HelperHash`, `LockfilePath`,
-  `TierClassification`, `OperatorAuthoredText` vs `ModelAuthoredText`).
-  Constructor capability scoping (per WV-01). `CredentialRecord` schema
-  extension with `helper_hash` field. Config file location.
-- **TDD §3: Policy gate (OQ-2, OQ-9, OQ-11).** Largest section. Supervisor +
-  fail-closed restart contract (CC-1). TTY-input vs model-emit primitive
-  (T-001). Allow/Warn/Deny graduation (OQ-9). Process-isolation model (OQ-11).
-  Lockfile authentication mechanism (WV-02). Keychain prompt-rate budget
-  (BP-05). Falsifier thresholds (N, M, R, R_F, X) per `docs/falsifiers.md`
-  TDD-refinement scope. Predicate maintenance subsection.
-- **TDD §4: Sandbox primitive (OQ-3).** sandbox-exec contingency (T-005);
-  Endpoint Security framework / hypervisor / Apple Virtualization options.
-- **TDD §5: Audit log (OQ-4, OQ-12).** HMAC vs Merkle scheme. Tool-registration
-  tagging contract for `secret_bearing` flag. Aggregation contract for
-  telemetry. PII posture (OQ-12). State-coherence file integrity (recursive,
-  per v3 §8 case 9). Fitness-function automated evaluator scope (BP-02).
-- **TDD §6: Memory.** Quarantine layout. Per-session vs per-project. Promotion
-  workflow.
+Each crate commit lands separately for incremental review. Each commit verifies
+cargo test + cargo clippy --all-targets -- -D warnings before commit.
 
-After TDD lands: REVIEW-1 (`code-review` skill on PRD + TDD) → REVIEW-2
-(`legal-review` + `threat-model` + `privacy`) → FIX-DOCS → DESIGN
-(`system-design` skill) → API (`api-design` skill) → Implementation begins.
+### REVIEW-1 / REVIEW-2 / FIX-DOCS (parallel-stream)
 
-If TDD review surfaces incremental findings against PRD v3, FIX-DOCS produces
-the Accepted PRD; otherwise v3 stands as Accepted.
+Once enough crates land for end-to-end smoke testing (~v0.0.6 milestone, after
+`cuttle-anthropic`), invoke `code-review` skill on PRD v3 + TDD v0 + landed code
+as REVIEW-1. Then `legal-review` + `threat-model` + `privacy` as REVIEW-2.
+FIX-DOCS produces the Accepted PRD + TDD; the Accepted milestone seals
+`docs/falsifiers.md` per D-14.
+
+### TDD-resolved sub-surfaces (work-items inherited by path #1 crates)
+
+Sub-surfaces flagged across session-4 review passes; each new crate inherits
+the relevant items as work-items:
+
+- v1.1 delta: TTY-provenance primitive (cuttle-gate ✓ done in v0.0.1), memory
+  quarantine area (cuttle-memory pending), L5 review queue storage (cuttle-rewardloop
+  pending), nested-harness lockfile (cuttle-runtime pending).
+- v1.2 delta (Fowler): constructor authorization capability scoping (cuttle-gate ✓
+  done in v0.0.1; cross-crate verification at REVIEW-1), serialization round-trip
+  for domain primitives (cuttle-credential ✓ done; cuttle-gate ✓ done; cuttle-runtime
+  pending), FFI/native-binding boundary (none yet, may surface at v0.2 if TS surface
+  is added).
+- v1.3 delta (adversarial): tool-registration tagging contract for audit-log digest
+  (cuttle-audit pending), state-coherence file integrity recursive (cuttle-runtime +
+  cuttle-audit pending), per-attestation model-context logging privacy-sensitive
+  (cuttle-falsifiers pending).
+
+Implementation begins on path #1; REVIEW-1/REVIEW-2/FIX-DOCS as parallel-stream.
 
 ### 2. Karpathy review (parallel stream; deferred from v0.5 path #1)
 
