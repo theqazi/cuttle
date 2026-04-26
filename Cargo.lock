@@ -100,6 +100,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuttle-audit"
+version = "0.0.3"
+dependencies = [
+ "chrono",
+ "cuttle-gate",
+ "cuttle-runtime",
+ "hmac",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "tempfile",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "cuttle-credential"
 version = "0.0.1"
 dependencies = [

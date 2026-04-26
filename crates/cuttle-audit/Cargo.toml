@@ -1,0 +1,25 @@
+[package]
+name = "cuttle-audit"
+version = "0.0.3"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle audit log: HMAC chain + ToolRegistry + secret_bearing tagging. Per docs/TDD.md §5."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+subtle.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+cuttle-runtime = { path = "../cuttle-runtime" }
+cuttle-gate = { path = "../cuttle-gate" }
+
+[dev-dependencies]
+tempfile.workspace = true
+rand.workspace = true
