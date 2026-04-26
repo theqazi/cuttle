@@ -1,0 +1,17 @@
+[package]
+name = "cuttle-sandbox"
+version = "0.0.9"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle macOS sandbox primitive. Generates SBPL profiles + invokes the standard macOS sandbox binary per TDD §4 + D-2026-04-26-26. v0.0.9 ships profile generation + sync spawn; rlimit enforcement deferred to v0.0.10 (warrants its own threat-model pass before unsafe libc surface lands)."
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+

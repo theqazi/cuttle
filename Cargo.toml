@@ -11,6 +11,7 @@ members = [
     "crates/cuttle-rewardloop",
     "crates/cuttle-falsifiers",
     "crates/cuttle-anthropic",
+    "crates/cuttle-sandbox",
 ]
 
 [workspace.package]

@@ -244,6 +244,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuttle-sandbox"
+version = "0.0.9"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "cuttle-skills"
 version = "0.0.5"
 dependencies = [
