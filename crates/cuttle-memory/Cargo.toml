@@ -1,0 +1,19 @@
+[package]
+name = "cuttle-memory"
+version = "0.0.4"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle auto-memory: OperatorAuthoredText / ModelAuthoredText + canonical/quarantine layout. Per docs/TDD.md §6 + D-31."
+
+[dependencies]
+serde.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+cuttle-gate = { path = "../cuttle-gate" }
+
+[dev-dependencies]
+tempfile.workspace = true
+serde_json.workspace = true

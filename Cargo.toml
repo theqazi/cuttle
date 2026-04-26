@@ -6,6 +6,7 @@ members = [
     "crates/cuttle-input",
     "crates/cuttle-runtime",
     "crates/cuttle-audit",
+    "crates/cuttle-memory",
 ]
 
 [workspace.package]

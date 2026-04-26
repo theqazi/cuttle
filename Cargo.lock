@@ -148,6 +148,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuttle-memory"
+version = "0.0.4"
+dependencies = [
+ "chrono",
+ "cuttle-gate",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "cuttle-runtime"
 version = "0.0.2"
 dependencies = [
