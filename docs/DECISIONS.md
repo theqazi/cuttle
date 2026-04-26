@@ -282,3 +282,84 @@ C. Defer falsifier additions to TDD. Violates the framework's pre-seal-before-v0
 - PRD §6.1.6 forward-refs to §11 step 3 (privacy review) and to TDD §5 (aggregation requirement).
 - Privacy skill becomes a Cuttle-pipeline obligation, not just a global mandatory-skill trigger.
 - N, M, R thresholds for the new falsifiers set in TDD §3.
+
+---
+
+## D-2026-04-26-10: Falsifier predicates cross-referenced as architectural fitness functions (Ford / Parsons / Kua)
+
+| Field   | Value                                                                                               |
+| ------- | --------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                          |
+| Status  | Accepted                                                                                            |
+| Source  | `process/martin-fowler-input.md` Source 2 (Building Evolutionary Architectures, foreword by Fowler) |
+| Affects | `docs/PRD.md` §12 (Sealed falsifier pre-registration)                                               |
+
+**Context**: Cuttle's §12 sealed falsifier predicates inherit terminology from research methodology (`framework_development_methodology.md:39-48`). Ford / Parsons / Kua's "architectural fitness function" concept names the same idea in industry-standard vocabulary: an objective, machine-evaluable assessment of an architectural characteristic, evaluated continuously through tests/metrics/monitoring/logging in the build. Adopting the cross-reference does not change Cuttle's discipline; it lets the predicates land in a conceptual slot that engineers reading the PRD already know.
+
+**Options considered**:
+A. Rename §12 falsifiers to fitness functions throughout. Loses the framework-methodology lineage; breaks the cross-reference to `framework_development_methodology.md`.
+B. Cross-reference. Keep "sealed falsifier" as the primary name (preserves framework-methodology lineage), add "fitness function" as the parenthetical industry equivalent in §12 introduction.
+C. Use both names interchangeably. Confusing.
+
+**Decision**: B. §12 introduction adds: "Each predicate is a Ford / Parsons / Kua _architectural fitness function_ (`process/martin-fowler-input.md` Source 2): an objective integrity assessment of an architectural characteristic, evaluated continuously rather than at one-off review."
+
+**Consequences**:
+
+- §12 gains a one-line cross-reference; the per-predicate entries are unchanged.
+- Cuttle's §12 predicates become discoverable as fitness functions to readers who arrive from the evolutionary-architecture literature.
+- Framework-side note (handoff path #4): the framework's §10.3 sealed-falsifier discipline is one instance of a broader convergence (CI-style continuous evaluation of architecture). Logged for `framework_external_corroboration.md`.
+
+---
+
+## D-2026-04-26-11: Domain-primitives invariant added to §6.1.5 (Johnsson / Deogun / Sawano, "Secure by Design")
+
+| Field   | Value                                                                                                                                  |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                                             |
+| Status  | Accepted                                                                                                                               |
+| Source  | `process/martin-fowler-input.md` Source 3 (Secure by Design, Manning 2019, foreword by Fowler)                                         |
+| Affects | `docs/PRD.md` §6.1.5 (Cross-cutting harness invariants), §10 OQ-1 (language choice security argument), `docs/falsifiers.md` indirectly |
+
+**Context**: PRD v1.1 already declared two structural-typing invariants in §6.1.5: attestation-provenance separation (T-001) and cross-session memory promotion (T-007). Both implicitly need a type-system primitive to enforce: today the PRD says "the gate distinguishes TTY-input from model-emit" but does not constrain how. Secure-by-Design's domain-primitives pattern is the canonical answer: wrap raw types (String, [u8], Path) in domain-meaningful types whose construction enforces invariants. This catches the v1.1 attestation-provenance and memory-quarantine invariants at the type system, not at runtime.
+
+**Options considered**:
+A. Leave the invariants as runtime predicates the gate evaluates. Works at v0.1 grain but pushes correctness onto careful coding rather than into the type system. Drift risk: a future TDD or implementation choice may quietly drop the runtime check.
+B. Adopt Secure-by-Design domain primitives as a §6.1.5 invariant. Trust-boundary-crossing values are constructed only through domain-primitive types whose constructors enforce invariants. Raw `String` / `[u8]` / `int` forbidden at trust-boundary surfaces. Concrete v0.1 primitives enumerated in source artifact.
+C. Defer to TDD §2 (data model). PRD-grain decision is: "the type system does the work, not the runtime." TDD picks the specific types.
+
+**Decision**: B + C. PRD-grain commitment: trust-boundary-crossing values are constructed through domain primitives (Johnsson / Deogun / Sawano pattern) that enforce invariants at construction. TDD enumerates the types. PRD §6.1.5 cites the source artifact for v1.2 candidates (`ApiKey`, `AttestationBody`, `HelperHash`, `LockfilePath`, `TierClassification`, `OperatorAuthoredText` vs `ModelAuthoredText`).
+
+**Consequences**:
+
+- §6.1.5 gains a new "Domain primitives at trust boundaries" invariant.
+- OQ-1 (language choice) gains an explicit security argument: TS structural typing makes domain-primitive enforcement weaker than Rust newtypes / Go named types. Combined with v1.1 CC-2 zeroization argument, the OQ-1 deliberation now leans Rust > Go > TS for security-load-bearing reasons (separate from velocity considerations).
+- TDD §2 (config / data model) gains a "domain primitive enumeration" subsection.
+- T-001 and T-007 closures move from "runtime predicate" to "type-system + runtime predicate." Defense-in-depth at the type layer.
+- Implementation cost flagged: domain primitives push complexity into the type system; PRD §9 Constraints already names "predicate maintenance cost" (per Carlos $100M/yr anchor); analogous "type system maintenance cost" applies. Acceptable trade.
+
+---
+
+## D-2026-04-26-12: Continuous-threat-modeling framing made explicit in §1 bedrock 1 (Mohan / Gumbley)
+
+| Field   | Value                                                                                                                                     |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                                                |
+| Status  | Accepted                                                                                                                                  |
+| Source  | `process/martin-fowler-input.md` Source 1 (Mohan & Gumbley, "Threat Modeling Guide for Software Teams", 2025, on Fowler's site)           |
+| Affects | `docs/PRD.md` §1 (Summary), §13 / §14 (framework framing); `framework_external_corroboration.md` (sidecar to be created, handoff path #4) |
+
+**Context**: PRD v1 §1 framed bedrock 1 as "deterministic security: every tool invocation routes through a deny-by-default policy gate. No model is in the policy loop." The Mohan/Gumbley 2025 article hosted on Fowler's site articulates the same architectural argument at the threat-modeling layer for human dev teams: "integrate threat modeling regularly, like continuous integration for security ... bite-sized, closely tied to what your team is working on right now." Cuttle's policy gate IS this argument applied at the per-tool-call grain for LLM agents. Naming this convergence explicitly in §1 narrows Cuttle's contribution claim from "novel architecture" to "novel application of an industry-converged principle" (the same shape as D-2026-04-26-01 with Carlos at the CI layer).
+
+**Options considered**:
+A. Leave §1 as-is. Convergence implicit; reader has to construct the cross-reference.
+B. Add a §1 sentence cross-referencing Mohan/Gumbley. Narrows the contribution claim; mirrors D-2026-04-26-01's Carlos cross-reference.
+C. Build a new §15 "External corroboration" listing all three independent voices (Carlos, Mohan/Gumbley, Ford/Parsons/Kua). More structural; lets future additions land cleanly.
+
+**Decision**: B + C. Add Mohan/Gumbley cross-reference to §1 paragraph 4 (where post-rectification framing already names Carlos). Add new §15 "External corroboration" enumerating the three independent voices and the convergent thesis (substrate beats ceremony). The convergence is now load-bearing for Cuttle's contribution claim and deserves its own structural home.
+
+**Consequences**:
+
+- §1 paragraph 4 grows by one sentence; Carlos and Mohan/Gumbley now cited together.
+- New PRD §15 "External corroboration" lists Carlos, Mohan/Gumbley, Ford/Parsons/Kua with one-line summary each.
+- Framework-side: `framework_external_corroboration.md` sidecar (handoff path #4) becomes the canonical home for this list as it grows. Cuttle's §15 is a snapshot; the framework sidecar is the live record.
+- Cuttle's claim register: "novel substrate-native form of an industry-converged principle." Even narrower than D-01's "novel application." Defensibility increases.
