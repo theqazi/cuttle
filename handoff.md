@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.4 (after session 4 em-dash cleanup, commits, threat-model + output-quality reviews of PRD v1, 2026-04-26)
+**Version**: handoff-0.5 (after session 4 PRD v1.1 application + delta-check, 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -22,37 +22,45 @@ implementation existence proof, not an effect claim.
 
 ## State at end of session 4 (2026-04-26)
 
-- **Repository**: `/Users/m0qazi/cuttle`. 3 commits on `main`:
+- **Repository**: `/Users/m0qazi/cuttle`. 6 commits on `main`:
   - `16bc70e` seed (sessions 1-2 artifacts + archived v0 PRD)
-  - `23455db` (session 4): PRD v1, DECISIONS log, Carlos integration, em-dash cleanup
-  - `2860f18` (session 4): threat-model + output-quality reviews of PRD v1
+  - `23455db` (session 4 part 1): PRD v1, DECISIONS log, Carlos integration, em-dash cleanup
+  - `2860f18` (session 4 part 1): threat-model + output-quality reviews of PRD v1
+  - `205f151` (session 4 part 1): handoff bumped to v0.4
+  - `b1913eb` (session 4 part 2): **PRD v1.1** + DECISIONS D-07/08/09
+  - `527a399` (session 4 part 2): v1 → v1.1 delta-check artifacts
     Working tree clean modulo this handoff update.
-- **PRD v1** at `docs/PRD.md` (302 lines, committed). Replaces v0 (now at `docs/archive/PRD-v0-2026-04-25.md`).
-  Addresses all 11 drift items from `sessions/2026-04-25-session-1-snapshot.md` §4
-  plus 6 Carlos-derived decisions (D-2026-04-26-01 through D-2026-04-26-06). Adds
-  three new sections (§12 sealed falsifier pre-registration; §13 content-vs-guidance;
-  §14 dual use of framework). Em-dash cleanup landed; 0 violations against CLAUDE.md
-  rule 7d.1 across all session-3/4 deliverables.
-- **Decision log** at `docs/DECISIONS.md` (189 lines, committed). ADR-lite format.
-  Seeds with 6 Carlos-driven entries. Convention: handoff carries session-1
-  decision headlines (below); DECISIONS.md carries entries from 2026-04-26 onward
-  with full structure (context/options/decision/consequences).
+- **PRD v1.1** at `docs/PRD.md` (committed `b1913eb`; v1 in git history at `23455db`; v0 at `docs/archive/PRD-v0-2026-04-25.md`).
+  v1 addressed all 11 drift items from `sessions/2026-04-25-session-1-snapshot.md` §4
+  plus 6 Carlos-derived decisions (D-2026-04-26-01 through D-2026-04-26-06). v1.1
+  applies 15 deduplicated edits closing 4 of 4 v1 CRITICAL threat-model findings
+  (T-001 attestation provenance separation; T-002 apiKeyHelper hash-pin; T-007
+  cross-session memory quarantine; T-009 exception-table operator-load) plus the 3
+  cross-cuts (CC-1 fail-closed gate, CC-2 in-memory key zeroization, CC-3 privacy
+  skill in §11). Adds three sections from v1: §12 sealed falsifier pre-registration
+  (now 6 predicates including F-Cuttle-SNAPSHOT-DRIFT and F-Cuttle-MEMORY-DRIFT);
+  §13 content-vs-guidance; §14 dual use of framework. Em-dash discipline maintained;
+  0 violations against CLAUDE.md rule 7d.1 across all session-3/4 deliverables.
+- **Decision log** at `docs/DECISIONS.md` (committed). ADR-lite format. 9 entries:
+  D-2026-04-26-01..06 (Carlos-driven) + D-2026-04-26-07..09 (v1.1 application:
+  implementation softening, trust-boundary tightening umbrella, pipeline expansion).
+  Convention: handoff carries session-1 decision headlines (below); DECISIONS.md
+  carries entries from 2026-04-26 onward with full structure
+  (context/options/decision/consequences).
 - **Process artifact** at `process/carlos-arguelles-input.md` (161 lines, committed).
   Preserves the Carlos Arguelles source material (3 articles, verbatim quotes
   where load-bearing) so PRD does not carry citation weight inline. Three-layer
   separation: process/ source → DECISIONS.md decisions → PRD.md implementation.
-- **Threat model of PRD v1** at `docs/threat-model-prd-v1.md` (committed in 2860f18).
-  PRD-grain STRIDE+ register on the 7 declared concerns. 10 threats (4 CRITICAL:
-  T-001 skill prompt-injection coerces Option C bypass, T-007 MEMORY.md poisoning,
-  T-002 apiKeyHelper script as beachhead, T-009 exception-table-as-bypass-map,
-  T-004 nested-harness env-var escape). 3 cross-cutting findings (CC-1 fail-closed
-  on gate crash, CC-2 in-memory key zeroization, CC-3 privacy-skill missing from §11).
-  12 required PRD v1.1 edits enumerated. Wolverine + Black Panther adversarial
-  review deferred to path #3 against PRD v2.
-- **Output-quality review of PRD v1** at `docs/output-quality-prd-v1.md` (committed
-  in 2860f18). PRD passes structural checklist (who/what/why-now/SC/non-goals/edge-
-  cases all PASS). 0 BLOCK, 5 FIX-BEFORE-V2, 5 NICE-TO-HAVE. Top finding (OQ-FIX-1):
-  PRD v1 §6.1.1 silently closes OQ-3 and OQ-4 while §10 still lists them open.
+- **Review artifacts (v1)** at `docs/threat-model-prd-v1.md` and
+  `docs/output-quality-prd-v1.md` (committed `2860f18`). v1 STRIDE+ register and v1
+  PRD-checklist + filler/hedging audit. Authoritative per-finding source for D-07/08/09.
+- **Delta-check artifacts (v1 → v1.1)** at `docs/threat-model-prd-v1.1-delta.md` and
+  `docs/output-quality-prd-v1.1-delta.md` (committed `527a399`). Verifies all 4 v1
+  CRITICALs closed at PRD-grain plus 3 cross-cuts; flags 4 new sub-surfaces for
+  TDD-grain treatment (TTY-provenance primitive, memory quarantine area, L5 review
+  queue storage, nested-harness lockfile). All 5 v1 output-quality FIX-BEFORE-V2
+  items closed. Wolverine + Black Panther adversarial review deferred to path #3
+  against PRD v2.
 - **Project memory**: 14 files, 560 lines (unchanged from session 3). No new
   feedback rules learned in session 4 (existing rules executed cleanly: decisive
   execution, save-memory-at-intervals, handoff-between-context-switches all
@@ -63,77 +71,44 @@ implementation existence proof, not an effect claim.
 
 ## Where to resume
 
-Six paths. The first is immediately gating; the rest can be sequenced.
+Five paths. The first is immediately gating; the rest can be sequenced.
 
-### 1. PRD v1.1 punchlist application (IMMEDIATE)
+### 1. Karpathy review (IMMEDIATE; Mo queued 2026-04-26)
 
-Replaces session-3 path #1 (em-dash cleanup + commits), which closed in session 4
-with commits `23455db` and `2860f18`. The PRD v1 reviews produced two punchlists
-that should be applied in a single PRD edit pass before Karpathy or adversarial
-review touches the doc.
+Promoted from path #2 in handoff-0.4 after PRD v1.1 application closed the prior
+path #1 in session 4 (commits `b1913eb` + `527a399`). Apply the same lens
+discipline used for Carlos: source-preservation in `process/`, decisions logged
+to DECISIONS.md, fold into PRD as v1.2.
 
-Sources:
-
-- `docs/threat-model-prd-v1.md` "Required PRD v1.1 edits" section (12 numbered items).
-- `docs/output-quality-prd-v1.md` "Action summary for PRD v1.1 author" section
-  (5 FIX-BEFORE-V2 items, deduplicated against the threat-model list).
-
-Highest-priority items (deduplicated, citing source IDs):
-
-1. §6.1.1 substrate: declare policy gate fails closed on gate-process death (CC-1).
-2. §6.1.1 credential vault: in-memory key zeroization on session end + panic (CC-2).
-3. §6.1.1 audit log: soften HMAC commitment OR resolve OQ-4 in §10 (T-003 + OQ-FIX-1).
-4. §6.1.1 sandbox: soften sandbox-exec commitment OR resolve OQ-3 in §10 (OQ-FIX-1).
-5. §6.1.1 apiKeyHelper: helper-hash recorded in `CredentialRecord`, mismatch refuses,
-   sandboxed network egress (T-002).
-6. §6.1.1 auto-memory + new §6.1.5 invariant: cross-session memory framed untrusted
-   until operator promotes; quarantine workflow (T-007).
-7. §6.1.5 escape-hatch invariant: exception tables operator-runtime-loaded, not
-   distributed; never model-readable (T-009).
-8. §6.1.6 telemetry: forward-ref to TDD §5 aggregation requirement; declare ACL on
-   local telemetry store (T-008 + OQ-FIX-5).
-9. §8 case 1: Option C attestation bodies require out-of-band TTY operator input,
-   not model-generated text (T-001).
-10. §8 case 6: nested-harness detection uses lockfile / process-tree, not env-var.
-    Fail-closed on inheritance failure (T-004).
-11. §6.1.2 L5: registry writes go through operator review queue; signed provenance (T-010).
-12. §11 step 3 (REVIEW-2): include `privacy` skill alongside legal-review and
-    threat-model (CC-3).
-13. §3.2: sharpen unhedged "never" claim (OQ-FIX-3).
-14. §6.1.2 v0.N column: name a falsifier signal or SC-equivalent per row (OQ-FIX-4).
-15. §12 falsifier set: add F-Cuttle-SNAPSHOT-DRIFT (T-006), F-Cuttle-MEMORY-DRIFT
-    (T-007), expand F-Cuttle-DISABLE to cover HMAC re-keying (T-003).
-
-Output: PRD v1.1 (single revision), DECISIONS.md gains entries D-2026-04-26-07
-through D-2026-04-26-N for the load-bearing PRD edits that change a previously
-declared decision (e.g., audit-log scheme choice). Re-run threat-model and
-output-quality against v1.1 before commit.
-
-### 2. Karpathy review (Mo queued 2026-04-26)
-
-Apply same lens as Carlos against Cuttle's bedrock thesis. Read karpathy.ai +
-public AI/eng writing (talks, blog posts, GitHub READMEs, twitter/X long-form).
+Apply Karpathy's lens against Cuttle's bedrock thesis. Read karpathy.ai + public
+AI/eng writing (talks, blog posts, GitHub READMEs, twitter/X long-form).
 Three-layer artifact discipline: `process/karpathy-input.md` source preservation
-→ `docs/DECISIONS.md` entries D-2026-04-26-07 onward → fold into PRD as v1.1
-or queue for v2 incorporation.
+→ `docs/DECISIONS.md` entries D-2026-04-26-10 onward → fold into PRD as v1.2 (or
+queue for v2 incorporation if findings are deep enough to justify holding for
+adversarial review).
 
 Anti-goal: do NOT compare Cuttle to nanoGPT or Karpathy's tooling. Single-target
 lens per `feedback_review_as_lens_not_comparator.md`.
 
-### 3. Adversarial review on the post-Karpathy PRD
+After Karpathy v1.2 lands, re-run threat-model + output-quality delta-check
+against v1.2 (same shape as v1 → v1.1 delta artifacts at
+`docs/threat-model-prd-v1.1-delta.md`).
 
-Sequence Karpathy AFTER em-dash cleanup but BEFORE adversarial review, so the
-adversary attacks the most-complete version. Then run Claude+Codex (or
-Claude+Gemini) adversarial defense modeled on the framework's `DUAL_AGENT_REVIEW.md`
-discipline. Output: PRD v2.
+### 2. Adversarial review on the post-Karpathy PRD
 
-### 4. PRD pruning to v3
+Run Claude+Codex (or Claude+Gemini) adversarial defense modeled on the framework's
+`DUAL_AGENT_REVIEW.md` discipline. Targets PRD v1.2 (post-Karpathy). Output: PRD v2.
+This is also the natural home for the deferred Wolverine + Black Panther review-board
+pass that the threat-model skill itself queued (see Step 8 in
+`docs/threat-model-prd-v1.md`).
+
+### 3. PRD pruning to v3
 
 Per `framework_methodology_document.md:34, 72`: "third version is shorter and
 trustworthy." Output: PRD v3, ready for sealing. Then sealed-falsifier
 pre-registration in `docs/falsifiers.md` (PRD §12) becomes immutable.
 
-### 5. Framework-doc updates from Carlos (parallel stream)
+### 4. Framework-doc updates from Carlos (parallel stream)
 
 Mo's directive 2026-04-26: "start updating our framework docs based on what we
 learn." Two homes:
@@ -147,13 +122,16 @@ learn." Two homes:
   identified gaps. Do NOT touch canonical `paper-agent-framework.md` directly
   (sealed artifact per methodology).
 
-Can run in parallel with paths 2-4. Tracked as task #8.
+Can run in parallel with paths 1-3.
 
-### 6. TDD start (gated on PRD v3)
+### 5. TDD start (gated on PRD v3)
 
 Only after PRD reaches v3 (post-adversarial, post-pruning, sealed). Resolves
-OQ-1 through OQ-6 + OQ-9 (per PRD v1 §10). Decisions there feed `system-design`
-and `api-design` skill outputs, then implementation.
+OQ-1 through OQ-6 + OQ-9 (per PRD v1.1 §10). Decisions there feed `system-design`
+and `api-design` skill outputs, then implementation. v1.1 added new TDD-grain
+sub-surfaces flagged in `docs/threat-model-prd-v1.1-delta.md` ("New surface
+introduced by v1.1 edits"): TTY-provenance primitive, memory quarantine area,
+L5 review queue storage, nested-harness lockfile.
 
 ## Anti-goal for resume
 
@@ -250,16 +228,20 @@ setup against the 5-layer framework. Invoke with: `Read /Users/m0qazi/claude-stu
 
 **Artifacts on disk (sessions 3 + 4, all committed):**
 
-- `docs/PRD.md` (v1, 302 lines, committed `23455db`). v0 archived at `docs/archive/PRD-v0-2026-04-25.md`.
-- `docs/DECISIONS.md` (189 lines, committed `23455db`). ADR-lite parallel decision
-  log; seeds with D-2026-04-26-01 through D-2026-04-26-06 (Carlos-driven).
+- `docs/PRD.md` (v1.1; committed `b1913eb`; v1 baseline at `23455db`). v0 archived at `docs/archive/PRD-v0-2026-04-25.md`.
+- `docs/DECISIONS.md` (committed `23455db` + `b1913eb`). ADR-lite parallel decision log;
+  9 entries: D-2026-04-26-01..06 (Carlos-driven) + D-07/08/09 (v1.1 application).
 - `process/carlos-arguelles-input.md` (161 lines, committed `23455db`). Source
   artifact preserving Carlos Arguelles Medium articles (URLs, verbatim quotes,
   what was used vs set aside).
-- `docs/threat-model-prd-v1.md` (committed `2860f18`). PRD-grain STRIDE+ register;
-  10 threats (4 CRITICAL); 12 required PRD v1.1 edits enumerated.
+- `docs/threat-model-prd-v1.md` (committed `2860f18`). PRD-grain STRIDE+ register on PRD v1;
+  10 threats (4 CRITICAL); 12 required PRD v1.1 edits enumerated. Authoritative per-finding source for D-08.
 - `docs/output-quality-prd-v1.md` (committed `2860f18`). 0 BLOCK / 5 FIX-BEFORE-V2
-  / 5 NICE-TO-HAVE; PRD passes structural checklist.
+  / 5 NICE-TO-HAVE; PRD v1 passes structural checklist.
+- `docs/threat-model-prd-v1.1-delta.md` (committed `527a399`). Verifies v1.1 closes
+  4 of 4 v1 CRITICALs at PRD-grain + 3 cross-cuts; flags 4 new sub-surfaces for TDD.
+- `docs/output-quality-prd-v1.1-delta.md` (committed `527a399`). Verifies all 5 v1
+  FIX-BEFORE-V2 items closed; NICE-TO-HAVE items carry forward.
 
 ## What this handoff intentionally omits
 
@@ -278,32 +260,33 @@ files; feedback rules govern long-session discipline (save memory at intervals;
 update handoff between context switches; decisive execution when evidence-grounded).
 Cite memory line numbers, don't re-derive.
 
-Repo state: 3 commits on main. Session 4 closed with 23455db (PRD v1 +
-DECISIONS + Carlos integration + em-dash cleanup) and 2860f18 (threat-model +
-output-quality reviews of PRD v1). Working tree clean.
+Repo state: 6 commits on main. Session 4 closed with PRD v1 (23455db) +
+v1 reviews (2860f18) + handoff v0.4 (205f151) + PRD v1.1 (b1913eb) + v1.1
+delta-check (527a399). Working tree clean. PRD v1.1 closes all 4 v1 CRITICAL
+threat-model findings + 3 cross-cuts at PRD-grain.
 
-Recommended first move: handoff.md "Where to resume" path #1 (PRD v1.1
-punchlist application). Two reviews produced 15 deduplicated edits queued
-against PRD v1; threat-model lists 12 required edits, output-quality lists 5
-FIX-BEFORE-V2 (overlap noted). Highest-priority: §6.1.1 fail-closed gate,
-in-memory key zeroization, soften OQ-3/OQ-4 commitments OR resolve them in §10,
-and §8 case 1 Option C attestation must be TTY-input not model-text. Output is
-PRD v1.1 + new DECISIONS entries D-2026-04-26-07 onward for the load-bearing
-changes. Re-run threat-model + output-quality against v1.1 before commit.
+Recommended first move: handoff.md "Where to resume" path #1 (Karpathy review).
+Promoted from path #2 in handoff-0.4 after v1.1 application closed the prior
+path #1. Apply same lens discipline as Carlos: source-preservation in
+process/karpathy-input.md, decisions logged D-2026-04-26-10 onward, fold into
+PRD as v1.2. Single-target lens per feedback_review_as_lens_not_comparator.md;
+do NOT compare Cuttle to nanoGPT or Karpathy's tooling. After v1.2 lands,
+re-run threat-model + output-quality delta-check against v1.2.
 
-After v1.1 commits, path #2 (Karpathy review) is queued by Mo. Three-layer
-artifact discipline: process/karpathy-input.md preserves source, DECISIONS.md
-gains entries from D-2026-04-26-N+1 onward, fold into PRD as v1.2 or queue for
-v2. Single-target lens per feedback_review_as_lens_not_comparator.md; do NOT
-compare Cuttle to nanoGPT or Karpathy's tooling.
+After Karpathy v1.2 commits, path #2 is the deferred adversarial review against
+v1.2 -> PRD v2. The threat-model skill already queued Wolverine + Black Panther
+(Step 8 in docs/threat-model-prd-v1.md); that pass is the natural fit for path
+#2.
 
-Anti-goals: don't re-derive the 12 session-1 decisions or the 6 session-3
+Anti-goals: don't re-derive the 12 session-1 decisions or the 9 session-3/4
 decisions (cite line numbers in handoff.md and DECISIONS.md respectively);
 don't re-prune memory (done in session 2); don't re-derive post-rectification
 framing (cite framework_development_methodology.md lines 22-27); don't inline
 cuttle_v01_option_c_enumeration.md back into framework_components.md
 (deliberately separated); don't re-research Carlos Arguelles articles
-(captured in process/carlos-arguelles-input.md); don't re-run threat-model or
-output-quality against unchanged PRD v1 (artifacts at docs/threat-model-prd-v1.md
-and docs/output-quality-prd-v1.md, committed 2860f18).
+(captured in process/carlos-arguelles-input.md); don't re-run the v1 reviews
+(artifacts at docs/threat-model-prd-v1.md / docs/output-quality-prd-v1.md
+committed 2860f18; v1.1 delta artifacts at docs/threat-model-prd-v1.1-delta.md /
+docs/output-quality-prd-v1.1-delta.md committed 527a399); don't re-apply the
+v1.1 punchlist (already in PRD v1.1 commit b1913eb, traced via D-07/08/09).
 ```
