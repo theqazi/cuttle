@@ -483,3 +483,84 @@ C. **TypeScript**. Disqualified per PRD v3 §6.1.1 + §6.1.5: structural typing 
 - Testing: `cargo test` + `proptest` for domain-primitive invariants. `#[tokio::test]` for async tests; no extra async test framework.
 - CI/CD: out of v0.1 scope (single-operator dogfood). Re-evaluate at v0.2.
 - v0.2+: TypeScript surface (e.g., thin TS CLI wrapper) acceptable IF the load-bearing security primitives stay Rust. Do not migrate Rust core to anything else without re-running PRD v3 §9 constraint evaluation.
+
+---
+
+## D-2026-04-26-16: Filesystem layout `~/.cuttle/` (resolves OQ-6)
+
+| Field   | Value                                                                                                 |
+| ------- | ----------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                            |
+| Status  | Accepted                                                                                              |
+| Source  | PRD v3 §6.1.1 + §10 OQ-6; PRD §8 case 9 (state-coherence file boundary); `docs/TDD.md` §2.1 reasoning |
+| Affects | `docs/TDD.md` §2.1; v0.1 implementation; backup/restore boundary (BP-04)                              |
+
+**Context**: PRD v3 OQ-6 listed three options for canonical config / state location: `~/.cuttle/`, XDG (`~/.config/cuttle/` + `~/.local/share/cuttle/`), or owner-pickable. The state-coherence file invariant (§8 case 9) plus backup/restore boundary (BP-04) require a single discoverable root.
+
+**Options considered**:
+A. `~/.cuttle/` operator-home single-root. Mirrors `~/.claude/`; one backup unit; one restore boundary.
+B. XDG-compliant split. Spreads state across `~/.config/cuttle/` (config) + `~/.local/share/cuttle/` (audit, transcripts) + `~/.local/state/cuttle/` (lockfile, state-coherence). Doubles the backup/restore surface; complicates §8 case 9 invariant; better Linux-ergonomics-purist fit but Cuttle is macOS-first in v0.1.
+C. Owner-pickable via env var (`CUTTLE_HOME`). Defers the decision but every other subsystem then needs path-injection. Skips the load-bearing-by-default discipline.
+
+**Decision**: A. v0.1 ships `~/.cuttle/` as the canonical root, mode 0700, with the seven subdirectories enumerated in TDD §2.1. Linux/Windows ports re-evaluate when v0.2 ships (XDG may be re-considered for Linux-port-specific paths).
+
+**Consequences**:
+
+- One backup unit; one restore boundary; one lockfile namespace.
+- Mirrors operator's existing `~/.claude/` for migration ergonomics.
+- Linux v0.2 may require XDG accommodation; revisit at v0.2 design.
+- `CUTTLE_HOME` env var is NOT a v0.1 surface (deferred to v0.2 to keep test-isolation cheap).
+
+---
+
+## D-2026-04-26-17: Domain-primitive enumeration + capability-token pattern for constructor authorization (specifies WV-01)
+
+| Field   | Value                                                                                                                                                                   |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                                                                              |
+| Status  | Accepted                                                                                                                                                                |
+| Source  | PRD v3 §6.1.5 (D-2026-04-26-11 + WV-01 / D-13); `docs/TDD.md` §2.4 + §2.5                                                                                               |
+| Affects | `docs/TDD.md` §2.4 / §2.5; v0.1 implementation crate boundaries; future `cuttle-input`, `cuttle-anthropic`, `cuttle-credential`, `cuttle-gate`, `cuttle-runtime` crates |
+
+**Context**: PRD v3 §6.1.5 commits to domain-primitives-at-trust-boundaries with constructor-authorization (WV-01). TDD §2 implements the commitment as Rust newtypes with `pub(crate)` constructors plus capability-token witness pattern for cross-crate authorization.
+
+**Options considered**:
+A. `pub(crate)` constructors only. Modules within the crate can call; modules outside cannot. Simple; works when the entire trust boundary is one crate.
+B. `pub(crate)` constructors + capability-token witness. Constructor takes a `&TtyInputCap` (or equivalent) parameter; only modules holding the capability can invoke. Cross-crate-safe.
+C. Trait objects + dynamic dispatch (e.g., `dyn Authorizer`). Runtime check, not type-system check. Weakens WV-01 to runtime discipline.
+
+**Decision**: B. Six v0.1 primitives enumerated in TDD §2.4: `ApiKey` (read-once + zeroizable), `AttestationBody { Tty | Model }` (T-001), `HelperHash` (T-002), `LockfilePath` (T-004), `TierClassification` enum (L2), `OperatorAuthoredText` vs `ModelAuthoredText` (T-001 + T-007). Capability tokens (`TtyInputCap`, etc.) issued once at session start by the appropriate crate's owner; cannot be cloned, serialized, or constructed outside the issuing module.
+
+**Consequences**:
+
+- Crate boundaries become trust boundaries: `cuttle-credential` owns `ApiKey` + `HelperHash`; `cuttle-gate` owns `AttestationBody` + capability tokens; `cuttle-runtime` owns `LockfilePath` + `TierClassification`; `cuttle-memory` owns the text-provenance pair.
+- Skills loader, MCP servers (v0.2+), and external sub-modules cannot acquire capabilities; they pass raw bytes through validating boundary functions.
+- Tests for each primitive verify constructor-not-callable-from-outside (compile-fail tests via `trybuild`).
+- `Drop` impl on `ApiKey` zeroizes; `panic = "abort"` build profile (per D-15) makes zeroization-on-panic deterministic.
+
+---
+
+## D-2026-04-26-18: Serialization round-trip contract for trust-boundary domain primitives (closes v1.2 delta TDD sub-surface #2)
+
+| Field   | Value                                                                                                                  |
+| ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                             |
+| Status  | Accepted                                                                                                               |
+| Source  | `docs/threat-model-prd-v1.2-delta.md` "v1.2-introduced sub-surfaces" #2 (serialization round-trip); `docs/TDD.md` §2.6 |
+| Affects | `docs/TDD.md` §2.6; v0.1 implementation `serde` derives on every trust-boundary primitive                              |
+
+**Context**: Domain primitives round-trip through audit-log JSONL, transcript JSONL, and config TOML. `AttestationBody { provenance: Tty }` serialized to JSON and re-deserialized must NOT become `AttestationBody { provenance: Model }` due to a missing-field default; otherwise the type-system enforcement of T-001 collapses at the serialization boundary.
+
+**Options considered**:
+A. Allow `#[serde(default)]` on `Provenance` enum. Forgiving deserialization; accepts old JSON without the field. Drops the type-system enforcement (default could collapse to Tty or Model).
+B. Forbid `#[serde(default)]` and `#[serde(other)]` on enum representing trust-boundary discriminants. Deserialization fails on missing or unknown variant. Strict; requires audit-log readers to handle deserialization errors.
+C. Custom deserializer with explicit version tag. Most defensive but heaviest engineering cost.
+
+**Decision**: B for v0.1. The cost (audit-log reader handles errors) is modest and concentrated in one module. C deferred to v0.2 if audit-log evolution requires it.
+
+**Consequences**:
+
+- Every trust-boundary primitive's `serde` derive is reviewed for `default` / `other` attributes; they are forbidden.
+- `proptest`-driven round-trip tests in `crates/cuttle-gate/tests/` verify the invariant for every primitive.
+- Audit-log reader (`cuttle-audit` crate, TDD §5) handles `serde::de::Error` explicitly with structured deny on encountering unknown / missing trust-boundary discriminant.
+- Future TDD-grade audit-log schema evolution (v0.2+): if a new `Provenance` variant is added, deserialization of older audit logs MUST fail; the operator runs an explicit migration that writes new entries while preserving old chain heads.
