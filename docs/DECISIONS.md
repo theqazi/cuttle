@@ -564,3 +564,110 @@ C. Custom deserializer with explicit version tag. Most defensive but heaviest en
 - `proptest`-driven round-trip tests in `crates/cuttle-gate/tests/` verify the invariant for every primitive.
 - Audit-log reader (`cuttle-audit` crate, TDD §5) handles `serde::de::Error` explicitly with structured deny on encountering unknown / missing trust-boundary discriminant.
 - Future TDD-grade audit-log schema evolution (v0.2+): if a new `Provenance` variant is added, deserialization of older audit logs MUST fail; the operator runs an explicit migration that writes new entries while preserving old chain heads.
+
+---
+
+## D-2026-04-26-19: Workspace structure (12 v0.1 crates, crate-as-trust-boundary)
+
+| Field   | Value                                                                     |
+| ------- | ------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                |
+| Status  | Accepted                                                                  |
+| Source  | `docs/TDD.md` §3.1; D-17 (constructor authorization via crate boundaries) |
+| Affects | Cargo workspace layout; trust-boundary mapping; v0.1 implementation       |
+
+**Context**: TDD §2.4 / §2.5 + D-17 commit to capability-token-witness pattern across crates. The crate dependency graph IS the trust-boundary graph; structuring it correctly at v0.1 prevents accidental capability leakage.
+
+**Decision**: 12 v0.1 crates: `cuttle-cli`, `cuttle-runtime`, `cuttle-gate`, `cuttle-input`, `cuttle-anthropic`, `cuttle-credential`, `cuttle-sandbox`, `cuttle-audit`, `cuttle-telemetry`, `cuttle-memory`, `cuttle-skills`, `cuttle-rewardloop`, `cuttle-falsifiers`. `cuttle-gate` is the dispatch choke point; `cuttle-anthropic` and `cuttle-skills` depend on it for tool dispatch.
+
+**Consequences**: trust boundaries enforced at compile time; `trybuild` compile-fail tests verify cross-crate capability acquisition is impossible.
+
+---
+
+## D-2026-04-26-20: In-process gate for v0.1 with panic = "abort"; OQ-11 forward-compat trait shape preserved
+
+| Field   | Value                                                          |
+| ------- | -------------------------------------------------------------- |
+| Date    | 2026-04-26                                                     |
+| Status  | Accepted (v0.1 scope; revisit at v0.2 latest per BP-01 / D-13) |
+| Source  | PRD v3 §6.1.1 (CC-1) + §10 OQ-11; `docs/TDD.md` §3.2 + §3.3    |
+| Affects | `cuttle-gate` crate API; v0.2 process-isolation promotion path |
+
+**Decision**: v0.1 ships single-process; gate panic triggers `panic = "abort"` (D-15) terminating the entire Cuttle process; operator restarts via CLI. Gate API structured as serializable message-passing surface (`GateRequest` / `GateResponse` enums) so v0.2 can wrap it behind Unix sockets without changing consumer code. v0.2 promotion criterion: F-Cuttle-DISABLE fires due to operator routinely invoking `--ignore-stale-state` proxy.
+
+**Consequences**: simpler v0.1; no IPC complexity; gate restart = process restart (visible to operator). v0.2 promotion is a transport swap, not an API rewrite.
+
+---
+
+## D-2026-04-26-21: Allow / Warn / Deny / Prompt graduation (resolves OQ-9)
+
+| Field   | Value                                                                          |
+| ------- | ------------------------------------------------------------------------------ |
+| Date    | 2026-04-26                                                                     |
+| Status  | Accepted                                                                       |
+| Source  | PRD v3 §10 OQ-9 (Carlos's "configurable risk dial"); `docs/TDD.md` §3.4        |
+| Affects | `cuttle-gate` `Decision` enum; per-rule config; audit-log + telemetry counters |
+
+**Decision**: 4-variant graduation. Allow (execute + audit), Warn (execute + audit + warning + telemetry counter), Deny (refuse + audit + suggested-exception), Prompt (TTY ask; collapses to Deny in non-interactive mode per PRD §8 case 3). Default for unmatched dispatch is `default_decision = "deny"`. Per-rule promotion to Warn requires explicit operator opt-in.
+
+**Consequences**: matches Carlos's risk-dial framing without weakening the deny-by-default floor; Warn telemetry surfaces "policies that are too noisy" for operator review.
+
+---
+
+## D-2026-04-26-22: Imperative Rust plug-ins for v0.1 policy expression (resolves OQ-2; DSL deferred to v0.N)
+
+| Field   | Value                                                                                  |
+| ------- | -------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                             |
+| Status  | Accepted (v0.1); DSL design deferred                                                   |
+| Source  | PRD v3 §10 OQ-2; `docs/TDD.md` §3.5                                                    |
+| Affects | `cuttle-gate::policies` module; recompile-to-update workflow for v0.1; v0.2 DSL design |
+
+**Decision**: v0.1 ships imperative Rust `Policy` trait with `Box<dyn Policy>` registration. Recompile to update. DSL deferred to v0.N pending dogfood-week audit-log patterns; the v0.2 DSL takes operator's actual gate-fire shapes as input rather than guessing.
+
+**Consequences**: v0.1 policy changes require Cuttle rebuild (acceptable for single-operator dogfood; operator ALREADY has Cuttle source). v0.2 DSL design has empirical input.
+
+---
+
+## D-2026-04-26-23: Lockfile HMAC + parent-PID + signing-key-in-memory (closes WV-02)
+
+| Field   | Value                                                           |
+| ------- | --------------------------------------------------------------- |
+| Date    | 2026-04-26                                                      |
+| Status  | Accepted                                                        |
+| Source  | `docs/adversarial-review-prd-v1.2.md` WV-02; `docs/TDD.md` §3.7 |
+| Affects | `cuttle-runtime::lockfile`; PRD v3 §8 case 6 enforcement        |
+
+**Decision**: lockfile contents = (parent_pid, 32-byte session token, HMAC of contents using per-session signing key). Signing key in process memory only (never written to disk); child process inheriting fd cannot regenerate valid HMAC. `O_CREAT | O_EXCL` for atomic create. Constant-time HMAC compare via `subtle` crate. Failure modes: missing → no nest, valid + alive → nest, invalid HMAC → fail closed (operator inspects), valid + dead PID → stale (operator confirms clear).
+
+**Consequences**: WV-02 TOCTOU closed at the create-then-fsync, read-then-trust, and inherit-then-forge windows. Operator sees structured failure modes; the gate fails closed by default.
+
+---
+
+## D-2026-04-26-24: Keychain prompt-rate budget (5/week) + session-scoped handle + override-as-falsifier-evidence (closes BP-05)
+
+| Field   | Value                                                                        |
+| ------- | ---------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                   |
+| Status  | Accepted                                                                     |
+| Source  | `docs/adversarial-review-prd-v1.2.md` BP-05; `docs/TDD.md` §3.8              |
+| Affects | `cuttle-credential`; `state-coherence.json`; F-Cuttle-DISABLE expanded scope |
+
+**Decision**: session-scoped Keychain handle (open once at session start, reuse across reads, in `ApiKey` zeroize-on-drop scope). Restart-budget: ≤5 prompts per rolling 7-day window tracked in `state-coherence.json`; budget exceeded → stderr warning at startup. `[anthropic] keychain_always_allow = true` override is allowed but logged as high-trust event and counts as F-Cuttle-DISABLE evidence.
+
+**Consequences**: Keychain prompt fatigue surfaces as operationally measurable signal (F-Cuttle-DISABLE) rather than silent operator-discipline degradation. The cross-purpose with CC-1 fail-closed gate (PRD v3 §6.1.1) is now visible in the audit log.
+
+---
+
+## D-2026-04-26-25: Falsifier threshold refinements + fatigue-detection privacy-sensitive logging contract
+
+| Field   | Value                                                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                                |
+| Status  | Accepted (refinements stand pre-seal; structural shape frozen at PRD v3 seal per D-14)                                    |
+| Source  | `docs/falsifiers.md` (TDD-refinement scope per each predicate); `docs/TDD.md` §3.9                                        |
+| Affects | `docs/falsifiers.md` thresholds; `cuttle-falsifiers` crate; OQ-12 partial cross-link (fatigue-detection privacy contract) |
+
+**Decision**: per-predicate threshold refinements documented in TDD §3.9: F-Cuttle-DISABLE expanded to count `keychain_always_allow` as (d)-class evidence; F-Cuttle-BEDROCK ships data-collection mechanism in v0.1, statistical test runs operator-side post-week; F-Cuttle-SUBSTRATE abandon-point definition specified (60s no-result, no follow-up audit entry); F-Cuttle-OPTION-C per-rule normalization formula given; F-Cuttle-SNAPSHOT-DRIFT operator-review rubric specified; F-Cuttle-MEMORY-DRIFT normalized against operator's own commit-creation rate; **F-Cuttle-FATIGUE: trigram tokenizer over last 5 conversation turns; per-attestation logging stored in `~/.cuttle/audit/fatigue/<session-id>.jsonl` with mode 0600 owner-only no-group ACL; fatigue-detection runs locally at end-of-session (no model call)**.
+
+**Consequences**: thresholds operationally measurable; fatigue-detection logging surface is a new sub-surface that OQ-12 (audit-log PII posture) must address comprehensively (the model context window snapshot may contain PII). The fatigue-log gets the strictest ACL of any v0.1 surface.

@@ -460,6 +460,273 @@ fn attestation_rejects_missing_provenance() {
 
 ---
 
-## §3 through §6: PENDING
+## §3. Policy gate (resolves OQ-2, OQ-9, OQ-11; specifies CC-1, T-001, WV-02, BP-05; refines falsifier thresholds)
+
+### 3.1 Workspace structure
+
+v0.1 ships as a Cargo workspace with the following crates. Each crate's name encodes its trust-boundary role per D-17.
+
+```text
+cuttle/
+├── Cargo.toml                    # workspace root; members below
+├── rust-toolchain.toml           # pinned per D-15
+├── deny.toml                     # cargo-deny config (D-15 dependency budget)
+└── crates/
+    ├── cuttle-cli/               # bin: `cuttle` entry point; argument parsing only
+    ├── cuttle-runtime/           # session orchestration; owns LockfilePath, TierClassification
+    ├── cuttle-gate/              # POLICY GATE; owns AttestationBody + capability tokens
+    ├── cuttle-input/             # TTY input handler; mints TtyInputCap
+    ├── cuttle-anthropic/         # Anthropic API client; thin reqwest wrapper
+    ├── cuttle-credential/        # credential vault; owns ApiKey + HelperHash
+    ├── cuttle-sandbox/           # macOS sandbox-exec invocation (TDD §4)
+    ├── cuttle-audit/             # audit-log writer/reader (TDD §5)
+    ├── cuttle-telemetry/         # cuttle telemetry surface (PRD §6.1.6)
+    ├── cuttle-memory/            # auto-memory; owns OperatorAuthoredText / ModelAuthoredText
+    ├── cuttle-skills/            # skills loader with Unicode allowlist (per WV-05)
+    ├── cuttle-rewardloop/        # AP/VP registry (L5 mechanic)
+    └── cuttle-falsifiers/        # falsifier predicate evaluator (TDD §3.9 stub for v0.1)
+```
+
+The dependency graph is acyclic and deliberately constrained so that **`cuttle-gate` is the choke point for every tool dispatch**. `cuttle-cli` depends on `cuttle-runtime`; `cuttle-runtime` depends on `cuttle-gate` + `cuttle-input` + `cuttle-anthropic` + `cuttle-credential` + `cuttle-audit` + `cuttle-skills` + `cuttle-memory` + `cuttle-rewardloop` + `cuttle-sandbox` + `cuttle-telemetry`. `cuttle-gate` depends only on primitives (no model client, no I/O). `cuttle-anthropic` and `cuttle-skills` depend on `cuttle-gate` to dispatch tool calls; they cannot bypass it because the dispatch API is the only way to request a tool execution.
+
+### 3.2 Supervisor + restart contract (CC-1 fail-closed gate)
+
+PRD v3 §6.1.1 commits Cuttle to fail closed on gate-process death. v0.1 ships **single-process** (in-process gate) with the supervisor pattern; OQ-11 (process isolation) is revisited at v0.2 latest. Single-process v0.1 means "fail closed on gate-process death" reduces to "fail closed on Cuttle process death," which is trivially true (the process is gone). The interesting case is **gate-task panic** within the Cuttle process.
+
+**Mechanism**: `cuttle-gate` exposes a single `dispatch()` async function. All tool calls go through it. The function holds a `GateState` (in-memory; not shared across threads except via `Arc<Mutex<>>` for the audit-log writer handle). If `dispatch()` panics, `panic = "abort"` (D-15) terminates the entire process. There is no per-call recovery; the operator restarts Cuttle via the CLI.
+
+```rust
+// crates/cuttle-gate/src/lib.rs
+pub struct GateState {
+    audit: Arc<AuditLogWriter>,
+    policy_db: PolicyDatabase,  // §3.5 imperative plug-ins
+    cap_registry: CapabilityRegistry,
+    telemetry: Arc<TelemetryWriter>,
+}
+
+impl GateState {
+    pub async fn dispatch(
+        &self,
+        tool_call: ToolCall,
+        attestation: Option<AttestationBody>,
+    ) -> Result<ToolResult, GateError> {
+        // 1. Pre-decision: policy lookup + attestation provenance check
+        let decision = self.policy_db.evaluate(&tool_call, attestation.as_ref())?;
+        // 2. Audit-log the decision (with attestation provenance)
+        self.audit.record_decision(&tool_call, &decision, attestation.as_ref()).await?;
+        // 3. Telemetry update (gate-fire counters)
+        self.telemetry.increment_gate_fire(&tool_call.tool_name, &decision);
+        // 4. Execute or deny
+        match decision {
+            Decision::Allow => self.execute_tool(tool_call).await,
+            Decision::Warn { reason } => {
+                eprintln!("[cuttle:warn] {}: {}", tool_call.tool_name, reason);
+                self.execute_tool(tool_call).await
+            }
+            Decision::Deny { reason, suggested_exception } => {
+                Err(GateError::Denied { reason, suggested_exception })
+            }
+            Decision::Prompt { .. } => unreachable!("Prompt collapses to Deny in non-interactive mode; interactive mode is OQ-9 follow-up"),
+        }
+    }
+}
+```
+
+**Restart contract**: there is no in-process restart. Operator-visible behavior on panic: Cuttle aborts; operator sees the panic message; operator runs `cuttle` again. `state-coherence.json` (per PRD v3 §8 case 9) is written at clean shutdown only; an aborted process leaves the file stale, which the next-startup invariant detects and refuses to start without `--restored-from-backup` (or `--ignore-stale-state` if the operator confirms the prior abort was their own).
+
+**v0.2 promotion criterion (OQ-11 revisit)**: if F-Cuttle-DISABLE fires due to operator routinely invoking `--ignore-stale-state` (proxy for "the gate is too brittle"), promote to OS-process isolation: `cuttle-gate` becomes a separate `cuttle-gated` daemon process supervising `cuttle-cli` over Unix sockets. Cost: typed IPC schema, IPC latency budget. Benefit: gate panics no longer abort the operator's session; gate restarts independently.
+
+### 3.3 IPC schema for OQ-11 (forward-compatible v0.2 sketch)
+
+For v0.1 the gate is in-process; for v0.2 it becomes out-of-process. To make the v0.2 promotion cheap, v0.1 already structures the gate API as a serializable message-passing surface even though all calls are local function calls today.
+
+```rust
+// Conceptual v0.2 IPC; v0.1 is the trait shape.
+#[derive(Serialize, Deserialize)]
+pub enum GateRequest {
+    Dispatch { tool_call: ToolCall, attestation: Option<AttestationBody> },
+    Heartbeat,
+    Shutdown { reason: String },
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum GateResponse {
+    Allowed { result: ToolResult },
+    Denied { reason: String, suggested_exception: Option<ExceptionSuggestion> },
+    Error { kind: GateErrorKind, message: String },
+}
+```
+
+v0.1 implements the dispatch trait directly without serialization. v0.2 wraps the same trait behind a Unix-socket transport (likely `tokio::net::UnixStream` + `serde_json` or `bincode` for the wire format). The trait shape stays identical so consumers (`cuttle-runtime`) don't change.
+
+### 3.4 Policy gate API: Allow / Warn / Deny graduation (resolves OQ-9)
+
+PRD v3 §10 OQ-9 left this open per Carlos's "configurable risk dial" lens. v0.1 ships the **graduated** model:
+
+```rust
+#[derive(Serialize, Deserialize, Clone)]
+pub enum Decision {
+    Allow,
+    Warn { reason: String },
+    Deny {
+        reason: String,
+        suggested_exception: Option<ExceptionSuggestion>,
+    },
+    Prompt { question: PromptQuestion },  // collapses to Deny in non-interactive mode (PRD §8 case 3)
+}
+```
+
+- **Allow**: tool executes; audit-log records the call.
+- **Warn**: tool executes; audit-log records both the call AND the warning reason; `cuttle telemetry` counts warns separately (per PRD §6.1.6).
+- **Deny**: tool does NOT execute; audit-log records the deny reason + the optional `suggested_exception` (so the deny path surfaces the operator option per PRD §8 case 8).
+- **Prompt**: ask the operator at TTY; non-interactive mode collapses to Deny.
+
+**Per-rule configuration** (lives in `~/.cuttle/config.toml` `[gate.rules]` section + per-rule TOML files in a future `~/.cuttle/policies/` directory at v0.2). Default for unmatched tool dispatches is `default_decision = "deny"` (PRD `[gate]` config). Rules promote to `Warn` only when the operator explicitly opts in for a specific tool/policy combination.
+
+### 3.5 Policy DSL vs imperative plug-ins (resolves OQ-2)
+
+**Decision: imperative Rust plug-ins for v0.1; DSL deferred to v0.N.**
+
+OQ-2 framed this as "declarative DSL or imperative plug-ins." Imperative plug-ins (Rust functions registered against the gate at compile time) win for v0.1 because:
+
+- Operator's 21 hooks (PRD v3 §2.1 baseline) are bash scripts; each one's logic is concrete. A DSL needs to express the union of those logics, which is design work that hasn't shipped at any complexity tier the operator already trusts.
+- v0.1 single-operator scope means "ship policies in the binary, recompile to update" is acceptable. The dogfood week's gate-fire patterns inform what the v0.2 DSL needs to express.
+- DSL adds a parser + interpreter as a trust-boundary surface. Better to defer until the v0.1 audit log shows what the DSL actually needs.
+
+```rust
+// crates/cuttle-gate/src/policies/mod.rs
+
+/// Each policy implements this trait. PolicyDatabase holds Vec<Box<dyn Policy>>
+/// and dispatches in priority order.
+pub trait Policy: Send + Sync {
+    fn name(&self) -> &str;
+    fn evaluate(&self, tool_call: &ToolCall, attestation: Option<&AttestationBody>) -> Option<Decision>;
+}
+
+// Example: bash destructive-shell policy (port of bash-guard.sh)
+pub struct BashDestructiveShell;
+
+impl Policy for BashDestructiveShell {
+    fn name(&self) -> &str { "bash-destructive-shell" }
+    fn evaluate(&self, tool_call: &ToolCall, attestation: Option<&AttestationBody>) -> Option<Decision> {
+        if tool_call.tool_name != "Bash" { return None; }
+        let cmd = tool_call.argument_str("command")?;
+        if !is_destructive(cmd) { return None; }
+        match attestation {
+            // Per Option C §6.1.3 case 2: destructive shell needs explicit
+            // operator-typed evidence with target enumeration + path allowlist + WHY.
+            Some(att) if att.provenance() == &Provenance::Tty
+                && validate_destructive_attestation(att.content()).is_ok() =>
+            {
+                Some(Decision::Allow)
+            }
+            _ => Some(Decision::Deny {
+                reason: format!("Destructive shell: {}", cmd),
+                suggested_exception: Some(ExceptionSuggestion::OptionC {
+                    rule: "bash-destructive-shell",
+                    required_fields: vec!["target_enumeration", "system_path_allowlist", "why"],
+                }),
+            }),
+        }
+    }
+}
+```
+
+Per WV-06 / WV-07 disclaimer (PRD v3 §6.1.5): the type system enforces `provenance() == &Provenance::Tty` rejects model-emitted text. It does NOT enforce operator-INTENT vs operator-FATIGUE-KEYPRESS; F-Cuttle-FATIGUE measures the residual.
+
+### 3.6 Predicate maintenance subsection (PRD v3 §9 constraint)
+
+Per Carlos $100M/yr Google pre-submit anchor: pre-execution gating relocates cost from post-hoc audit to predicate engineering. v0.1 commits to:
+
+- **Per-policy maintainer log**: each `Policy` impl carries a doc comment `/// Maintainer: <name> | Source: <PRD-or-DECISIONS-anchor> | Last-reviewed: <date>`. Reviewed at v0.1 ship and on every Anthropic API surface change.
+- **Anthropic API surface change cadence**: weekly check (manual via `cuttle audit` of upstream Anthropic-SDK changelog; automated in v0.2). Any change that affects tool-call shape (e.g., new tool, parameter schema change) triggers a per-policy review.
+- **Policy-set audit at REVIEW-1**: `code-review` skill on the policy set. Output: `docs/policy-coverage-v0.1.md` mapping the operator's 21 hooks to v0.1 policies (per SC-3).
+- **Policy-fire telemetry**: each policy's gate-fire / gate-bypass / deny counts surface in `cuttle telemetry`. Policies with zero fires after dogfood week are flagged for review (either remove or strengthen).
+
+### 3.7 Lockfile authentication mechanism (WV-02 closure)
+
+PRD v3 §8 case 6 + WV-02: lockfile in `~/.cuttle/run/<session-id>.lock` is the nested-harness detection signal. WV-02 raised TOCTOU concern: an attacker who can craft a fake lockfile defeats the inheritance check.
+
+**Mechanism**: lockfile contents include (a) the parent Cuttle process PID, (b) a 32-byte random session token, (c) a SHA-256 HMAC of the contents using a per-session signing key derived at session start. The signing key lives in process memory only (never written to disk); a child process inheriting the file descriptor can read the lockfile but cannot regenerate a valid HMAC because the signing key is not exported.
+
+```rust
+// crates/cuttle-runtime/src/lockfile.rs (sketch)
+
+pub struct LockfileContents {
+    pub parent_pid: u32,
+    pub session_token: [u8; 32],
+    pub hmac: [u8; 32],
+}
+
+pub fn write_lockfile(path: &LockfilePath, signing_key: &SigningKey) -> Result<(), LockfileError> {
+    let contents = LockfileContents {
+        parent_pid: std::process::id(),
+        session_token: rand::thread_rng().gen(),
+        hmac: [0u8; 32],
+    };
+    let serialized = bincode::serialize(&contents)?;
+    let hmac = compute_hmac(signing_key, &serialized);
+    // ... write atomically with O_CREAT | O_EXCL ...
+}
+
+pub fn verify_lockfile(path: &LockfilePath, expected_signing_key: &SigningKey)
+    -> Result<LockfileContents, LockfileError>
+{
+    // Read; recompute HMAC; constant-time compare via subtle crate.
+    // Failure modes:
+    //   - File missing -> no nested harness; allow start.
+    //   - File present + valid HMAC + parent_pid alive -> nested; refuse start unless CUTTLE_NESTED=allow.
+    //   - File present + invalid HMAC -> attacker-crafted lockfile OR stale + key rotation.
+    //                                    Per PRD §8 case 6: fail closed. Operator must manually inspect.
+    //   - File present + valid HMAC + parent_pid not alive -> stale; require operator
+    //                                                           confirmation to clear.
+}
+```
+
+The `O_CREAT | O_EXCL` flag closes the create-then-fsync TOCTOU window for the create operation. The HMAC closes the read-then-trust TOCTOU window. The signing key in process memory closes the inherit-then-forge window.
+
+### 3.8 Keychain prompt-rate budget (BP-05 closure)
+
+PRD v3 §6.1.1 acknowledges the cross-purpose between CC-1 fail-closed gate and macOS Keychain per-process prompt-fatigue. v0.1 mechanism:
+
+- **Session-scoped Keychain handle**: `cuttle-credential` opens the Keychain item once at session start, holds the handle in memory, and reuses it across in-session credential reads. The handle is in `ApiKey` zeroize-on-drop scope.
+- **Restart-budget**: `~/.cuttle/state-coherence.json` (PRD §8 case 9 file) tracks Keychain-prompt count for the current dogfood week (rolling 7-day window). Budget: ≤5 prompts per week. If exceeded, Cuttle prints a warning to stderr at startup recommending the operator review whether the gate-restart frequency is high enough to warrant OQ-11 process-isolation promotion.
+- **Override**: operator can set `[anthropic] keychain_always_allow = true` in `config.toml` to suppress the warning (acknowledging the per-process-isolation degradation). The setting is logged as a high-trust event in the audit log; it counts as evidence for F-Cuttle-DISABLE per `docs/falsifiers.md`.
+
+### 3.9 Falsifier threshold refinement (per `docs/falsifiers.md`)
+
+`docs/falsifiers.md` ships in pre-seal-draft state with first-draft thresholds. TDD §3.9 refines:
+
+- **F-Cuttle-DISABLE**: `N=1` event of (a)-(c), `N=3` events of (d) override-snapshot-block per dogfood week. Refinement: also count `keychain_always_allow = true` (per §3.8) as a (d)-class event. **Updated v0.1 trigger**: any of {gate-disable, chain-rotation, --restored-from-backup, ≥3 override-snapshot, ≥1 keychain_always_allow}.
+- **F-Cuttle-BEDROCK**: `N=20` SYSTEM-tier sessions, `p<0.05`. Statistical test: Mann-Whitney U two-sample (Cuttle gate-fire-vs-bypass rates vs toolkit skill-skip rates). v0.1 ships the data-collection mechanism (`cuttle telemetry --bedrock-export` produces a CSV); the statistical test runs in operator's R / Python post-week.
+- **F-Cuttle-SUBSTRATE**: `X=2.0` ratio. Refinement: abandon-point definition is **any operator action that initiates a tool dispatch but does not see the tool result within 60 seconds AND is not followed by a deny/warn audit-log entry**. Captures both "operator killed Cuttle mid-dispatch" and "operator gave up waiting."
+- **F-Cuttle-OPTION-C**: `N=10` per rule. Refinement: per-rule normalization formula = `bypass_count / (bypass_count + deny_count + accept_count)` (a fraction in [0,1]). Compare against toolkit's closest-mapping skill skip rate.
+- **F-Cuttle-SNAPSHOT-DRIFT**: `N=3` overrides, `M=2` wrong. Operator-review rubric: a "wrong" override is one where the SYSTEM-tier task subsequently fails REVIEW-1 / REVIEW-2 / FIX-DOCS at v0.1's PRD-pipeline grain. Operator manually rates each override post-week.
+- **F-Cuttle-MEMORY-DRIFT**: `R=0.8` (operator accepts ≥80% of proposed promotions). Refinement: normalize against operator's overall acceptance rate for genuine canonical-memory edits (proxy: track the operator's own MEMORY.md commits; compare promotion-acceptance rate to commit-creation rate).
+- **F-Cuttle-FATIGUE**: `R_F=0.30` (≥30% trigram-matchable). Refinement: trigram tokenizer over both attestation body and the model's last 5 turns of context (not just immediately-prior turn; the operator may type 2-3 turns later). Temporal window = 5 conversation turns. **Privacy-sensitive logging contract** (per OQ-12 cross-link, resolved in TDD §5): the model context window snapshot is stored in a separate `~/.cuttle/audit/fatigue/<session-id>.jsonl` file with even tighter ACL than the regular audit log (mode 0600, owner-only, no group). The fatigue-detection job runs locally (no model call) at end-of-session.
+
+### Cross-references and what §3 does NOT decide
+
+- TDD §4: sandbox primitive crate impl.
+- TDD §5: audit-log scheme + tool-registration tagging contract for `secret_bearing` flag (per WV-03).
+- TDD §6: memory quarantine layout.
+- The `~/.cuttle/policies/` directory for per-rule TOML config is NOT a v0.1 surface; v0.1 hardcodes policies in the binary.
+- The DSL design is NOT v0.1 scope; the v0.2 follow-up takes operator's dogfood-week audit-log patterns as input.
+
+### DECISIONS entries from §3
+
+- **D-2026-04-26-19**: workspace structure (12 v0.1 crates) + crate-as-trust-boundary mapping.
+- **D-2026-04-26-20**: in-process gate for v0.1 with `panic = "abort"` restart-via-cli; OQ-11 forward-compat trait shape preserved for v0.2 IPC promotion.
+- **D-2026-04-26-21**: Allow/Warn/Deny/Prompt graduation (resolves OQ-9).
+- **D-2026-04-26-22**: imperative Rust plug-ins for v0.1 policy expression (resolves OQ-2); DSL deferred to v0.N pending dogfood-week audit-log patterns.
+- **D-2026-04-26-23**: lockfile HMAC + parent-PID + signing-key-in-memory (closes WV-02).
+- **D-2026-04-26-24**: Keychain prompt-rate budget (5/week) + session-scoped handle + override-as-falsifier-evidence (closes BP-05).
+- **D-2026-04-26-25**: falsifier threshold refinements (per `docs/falsifiers.md`); fatigue-detection privacy-sensitive logging contract (cross-links OQ-12 resolution in §5).
+
+(D-19/20/21/22/23/24/25 to be added to DECISIONS.md when §3 commits.)
+
+---
+
+## §4 through §6: PENDING
 
 To be written in subsequent commits.
