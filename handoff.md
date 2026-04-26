@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.9 (after session 4 TDD v0 complete + v0.0.1 implementation scaffolding, 2026-04-26)
+**Version**: handoff-0.10 (after session 4 cuttle-runtime + cuttle-audit + cuttle-memory landed; 6 of 12 crates; 50/50 tests, 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -22,7 +22,7 @@ implementation existence proof, not an effect claim.
 
 ## State at end of session 4 (2026-04-26)
 
-- **Repository**: `/Users/m0qazi/cuttle`. 22 commits on `main`:
+- **Repository**: `/Users/m0qazi/cuttle`. 26 commits on `main`:
   - `16bc70e` seed (sessions 1-2)
   - Part 1 (PRD v1 baseline + reviews + handoff v0.4): `23455db`, `2860f18`, `205f151`
   - Part 2 (PRD v1.1 + delta + handoff v0.5): `b1913eb`, `527a399`, `7880da1`
@@ -30,7 +30,8 @@ implementation existence proof, not an effect claim.
   - Part 4 (adversarial review + PRD v1.3 + delta + handoff v0.7): `3f739ef`, `a8fa349`, `db09b8c`, `baa0dc9`
   - Part 5 (PRD v3 pruning + sealed falsifiers + delta + handoff v0.8): `4f0ffbb`, `2ce8b1b`, `a9252c6`, `b38aaa4`
   - Part 6 (TDD v0 complete: §1..§6 + DECISIONS D-15..31): `389edb7`, `9c88cf2`, `f1c6d02`, `045b4ce`
-  - Part 7 (v0.0.1 implementation scaffolding: workspace + 3 crates): `67ba1a3`
+  - Part 7 (v0.0.1 scaffolding + handoff v0.9): `67ba1a3`, `8a7deae`
+  - Part 8 (cuttle-runtime v0.0.2 + cuttle-audit v0.0.3 + cuttle-memory v0.0.4): `f6e503a`, `8b0f81a`, `1bfd7f0`
     Working tree clean modulo this handoff update.
 - **PRD v3** at `docs/PRD.md` (committed `4f0ffbb`; v1.3 at `a8fa349`; v1.2 at `5c0a741`; v1.1 at `b1913eb`; v1 at `23455db`; v0 at `docs/archive/PRD-v0-2026-04-25.md`). v3 = post-pruning of v1.3 (= v2 per §11 versioning convention). 319 lines (was 336 in v1.3). All PRD-grain commitments preserved verbatim per `docs/threat-model-prd-v3-delta.md` audit; pruning targeted redundant cross-references and the §11 convention text. v3 is the seal candidate; FIX-DOCS at end of REVIEW-1 + REVIEW-2 produces the Accepted version. **Sealed-falsifier pre-registration** at `docs/falsifiers.md` (committed `2ce8b1b`) in pre-seal-draft state with all 7 predicates (F-Cuttle-DISABLE / BEDROCK / SUBSTRATE / OPTION-C / SNAPSHOT-DRIFT / MEMORY-DRIFT / FATIGUE) structurally locked; threshold refinements permitted up to v0.1 ship.
 - **Decision log** at `docs/DECISIONS.md` (committed). ADR-lite format. 31 entries:
@@ -46,12 +47,18 @@ implementation existence proof, not an effect claim.
   Allow/Warn/Deny graduation, imperative plug-ins, predicate maintenance, lockfile
   HMAC, Keychain rate-budget, falsifier threshold refinement); §4 sandbox; §5
   audit log + tool-tagging + state-coherence + PII posture; §6 memory + quarantine.
-- **v0.0.1 implementation scaffolding** at `Cargo.toml` + `crates/` (committed
-  `67ba1a3`). Cargo workspace pinned to Rust 1.95 stable + 7 workspace deps + release
-  panic=abort. Three crates: `cuttle-credential` (ApiKey + HelperHash + CredentialRecord;
-  9 tests pass); `cuttle-gate` (AttestationBody + TtyInputCap + Decision; 7 tests pass);
-  `cuttle-input` (Session that mints TtyInputCap; 1 test passes). 17/17 tests pass;
-  cargo clippy --all-targets -- -D warnings clean.
+- **6 of 12 v0.1 crates landed** at `crates/` (Cargo workspace pinned to Rust 1.95
+  stable + 11 workspace deps + release panic=abort). 50/50 tests pass; cargo clippy
+  --all-targets -- -D warnings clean across the whole workspace.
+  - `cuttle-credential` v0.0.1 (`67ba1a3`): ApiKey + HelperHash + CredentialRecord. 9 tests.
+  - `cuttle-gate` v0.0.1 (`67ba1a3`): AttestationBody + TtyInputCap + Decision. 7 tests.
+  - `cuttle-input` v0.0.1 (`67ba1a3`): Session that mints TtyInputCap. 1 test.
+  - `cuttle-runtime` v0.0.2 (`f6e503a`): LockfilePath HMAC (WV-02 closure) +
+    TierClassification + SigningKey. 16 tests.
+  - `cuttle-audit` v0.0.3 (`8b0f81a`): HMAC chain (D-27) + ToolRegistry safe-by-default
+    (WV-03 closure) + DefaultRedactor (D-30 OQ-12). 9 tests.
+  - `cuttle-memory` v0.0.4 (`1bfd7f0`): OperatorAuthoredText / ModelAuthoredText pair
+    (T-007) + canonical/quarantine layout + cap-witnessed promotion (D-31). 8 tests.
 - **Process artifacts** (three-layer discipline: source preservation):
   `process/carlos-arguelles-input.md` (161 lines, committed `23455db`) preserves
   Carlos Arguelles articles. `process/martin-fowler-input.md` (committed `5c0a741`)
