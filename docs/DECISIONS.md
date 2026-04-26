@@ -415,3 +415,40 @@ C. Defer adversarial findings to v2 along with Karpathy. Loses the chance to har
 - Cuttle's contribution claim further narrowed: substrate-native form of converged principle, with HONEST DISCLAIMER that operator-fatigue at the per-attestation grain is not solved in v0.1.
 
 The artifact `docs/adversarial-review-prd-v1.2.md` is the per-finding source; this DECISIONS entry is the umbrella commit.
+
+---
+
+## D-2026-04-26-14: PRD pruned to v3 per "third version is shorter and trustworthy"
+
+| Field   | Value                                                                                                                                              |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                                                         |
+| Status  | Accepted                                                                                                                                           |
+| Source  | `framework_methodology_document.md:34, 72` ("third version is shorter and trustworthy"); handoff v0.7 path #1                                      |
+| Affects | `docs/PRD.md` (full rewrite from v1.3 → v3); `docs/falsifiers.md` (sealed-falsifier pre-registration created); §11 versioning convention rewritten |
+
+**Context**: PRD v1.3 closed the adversarial-review punchlist but accumulated cross-reference scar tissue from three review cycles (v1.1 / v1.2 / v1.3). The framework's discipline calls for a pruning pass that produces v3, the seal-candidate version. Per session-1 discipline, pruning is rewording, not rescoping.
+
+**Options considered**:
+A. Aggressive prune: remove §13 / §14 (toolkit-content-vs-guidance + dual-use), collapse §6.1.5 invariants, merge §15 into §1. Risk: loses commitments and provenance. Worse: makes v3 less trustworthy than v1.3.
+B. Conservative prune: preserve all PRD-grain commitments and provenance, tighten only redundant cross-references (D-XX cited in 3+ places where one is enough), collapse layered hedges, rewrite §11 versioning convention to acknowledge actual revision history (v1.x → v2 → v3). Net ~5% reduction in lines.
+C. Skip pruning: ship v1.3 as v3 directly without rewrite. Loses the discipline's second-order benefit (forcing the author to re-read everything once at the seal candidate's grain).
+
+**Decision**: B. Conservative prune. v3 is 319 lines (was 336 in v1.3), every PRD-grain commitment preserved verbatim. Pruning targets:
+
+- Status field collapsed from 4 lines listing prior version commits to 1 line; the prior-version commit chain lives in handoff and git history.
+- §1 paragraph 4: in-paragraph corroboration cite shortened (Carlos + Mohan/Gumbley + Ford named) to just "four independent industry voices converge" with forward-ref to §15 table.
+- §6.1.1 bullets: "TDD §X must specify..." sub-clauses collapsed where the OQ already covers them in §10. Constraint preserved: TDD inheritance is named once per bullet, not twice.
+- §6.1.5 attestation-provenance limitation paragraph: tightened from 5 sentences to 4; the operational consequence (F-Cuttle-FATIGUE in §12) preserved.
+- §11 versioning convention REWRITTEN to acknowledge actual revision history rather than the original §11 prediction. v1.x = micro-revisions; v2 = post-adversarial collapsed label (= v1.3); v3 = post-pruning. FIX-DOCS happens after TDD review surfaces incremental findings against v3.
+- §12 falsifier predicates: each predicate's parenthetical cross-references tightened (D-XX cited once not twice when both citations were trivially co-located).
+- §15 paragraph after the corroboration table: tightened from 4 sentences to 3, narrowing-claim sentence preserved verbatim.
+
+**Consequences**:
+
+- v3 is 319 lines (5% reduction). Modest, because v1.3 was already dense.
+- All 6 success criteria, 9 edge cases, 12 OQs, 7 falsifier predicates, 6 cross-cutting invariants preserved verbatim (per delta-check at `docs/threat-model-prd-v3-delta.md`).
+- §11 versioning convention now describes the actual session-4 revision history; future readers won't be confused that the doc says "v2 after adversarial review" while the file is labeled v3.
+- `docs/falsifiers.md` created and sealed (per SC-6 and `framework_development_methodology.md:39-43`). The seal triggers immutability at v0.1 ship; until then, refinements permitted.
+- Pipeline §11 step list collapsed: the prior step "Adversarial review → PRD v2" and step "PRD pruning → v3" are both done; v3 is now the entry point. Subsequent steps: TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → Implementation. Karpathy review (handoff path #2) is parallel-stream and may produce v3.1 if its findings warrant; otherwise v3 stands.
+- v3 is the seal candidate. FIX-DOCS at the end of REVIEW-1 + REVIEW-2 (which run against PRD + TDD) will produce the `Accepted` version.
