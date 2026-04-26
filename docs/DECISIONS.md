@@ -452,3 +452,34 @@ C. Skip pruning: ship v1.3 as v3 directly without rewrite. Loses the discipline'
 - `docs/falsifiers.md` created and sealed (per SC-6 and `framework_development_methodology.md:39-43`). The seal triggers immutability at v0.1 ship; until then, refinements permitted.
 - Pipeline §11 step list collapsed: the prior step "Adversarial review → PRD v2" and step "PRD pruning → v3" are both done; v3 is now the entry point. Subsequent steps: TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → Implementation. Karpathy review (handoff path #2) is parallel-stream and may produce v3.1 if its findings warrant; otherwise v3 stands.
 - v3 is the seal candidate. FIX-DOCS at the end of REVIEW-1 + REVIEW-2 (which run against PRD + TDD) will produce the `Accepted` version.
+
+---
+
+## D-2026-04-26-15: TDD §1 picks Rust as v0.1 implementation language (resolves OQ-1)
+
+| Field   | Value                                                                                                             |
+| ------- | ----------------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                                        |
+| Status  | Accepted                                                                                                          |
+| Source  | PRD v3 §9 Constraints + §6.1.1 + §6.1.5; `docs/TDD.md` §1 reasoning                                               |
+| Affects | `docs/TDD.md` §1 (resolved); §2 onward (Rust-specific data model and code samples); v0.1 implementation toolchain |
+
+**Context**: PRD v3 §9 leaned Rust > Go > TS on security grounds (CC-2 zeroization + §6.1.5 nominal-type domain primitives + WV-01 constructor authorization). TDD §1 is the first hard commitment to a specific language; it propagates into every other TDD section and the v0.1 codebase.
+
+**Options considered**:
+A. **Rust**. Native `zeroize` crate; `pub(crate)` constructors for module-private capability scoping; nominal typing without escape hatches; first-class systems-language for fork/exec/sandbox-exec; cheap typed IPC; deterministic panic via `panic = "abort"`. Trades velocity (slower compile times, no official Anthropic SDK) for security defensibility.
+B. **Go**. Operationally acceptable. Native systems-language affinity, fast compile times, ergonomic supervisor patterns (goroutines + channels). Trades multiple security-critical constraints: zeroization is `mlock` + explicit overwrite (more error-prone than Rust); GC is non-deterministic; named types enforce nominal typing but `interface{}` and type assertions give escape hatches that weaken WV-01 constructor authorization.
+C. **TypeScript**. Disqualified per PRD v3 §6.1.1 + §6.1.5: structural typing collapses §6.1.5 nominal-type domain primitives; zeroization requires native bindings (FFI = new attack surface per v1.2 delta TDD sub-surface #3); weak process-isolation primitives.
+
+**Decision**: A. Rust uniquely satisfies CC-2 (deterministic on-drop zeroization), WV-01 (`pub(crate)` constructors with no escape hatch), and §6.1.5 nominal-type primitives. Go's escape hatches (interface{}, type assertion) make WV-01 closure operationally fragile in a way that would surface as REVIEW-2 findings against PRD SC-5 (zero CRITICAL findings on v0.1 implementation). The velocity trade does not pay for itself; v0.1 needs to ship as a defensible existence proof per `framework_development_methodology.md:33-37`.
+
+**Consequences**:
+
+- Toolchain: Rust 2024 edition, stable channel, pinned via `rust-toolchain.toml`.
+- Async runtime: Tokio 1.x (multi-threaded, mature).
+- Anthropic client: thin client over `reqwest` + `serde` + `eventsource-stream`. No third-party Anthropic SDK in v0.1 (supply-chain risk per CamoLeak / postmark-mcp incident class). Re-evaluate at v0.2 after `legal-review` + `sbom-license` pass.
+- Crate dependency budget: ≤30 direct dependencies in v0.1 `Cargo.toml`. Each direct dependency requires explicit operator approval. `cargo audit` + `cargo deny` configured for indirect dependencies.
+- Build profile: release with `panic = "abort"` (deterministic abort for CC-2 zeroization-on-panic invariant). Debug profile preserved.
+- Testing: `cargo test` + `proptest` for domain-primitive invariants. `#[tokio::test]` for async tests; no extra async test framework.
+- CI/CD: out of v0.1 scope (single-operator dogfood). Re-evaluate at v0.2.
+- v0.2+: TypeScript surface (e.g., thin TS CLI wrapper) acceptable IF the load-bearing security primitives stay Rust. Do not migrate Rust core to anything else without re-running PRD v3 §9 constraint evaluation.
