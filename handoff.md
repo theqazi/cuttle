@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.6 (after session 4 Fowler pass / PRD v1.2 + delta-check, 2026-04-26)
+**Version**: handoff-0.7 (after session 4 adversarial review + PRD v1.3 + delta-check, 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -22,7 +22,7 @@ implementation existence proof, not an effect claim.
 
 ## State at end of session 4 (2026-04-26)
 
-- **Repository**: `/Users/m0qazi/cuttle`. 9 commits on `main`:
+- **Repository**: `/Users/m0qazi/cuttle`. 12 commits on `main`:
   - `16bc70e` seed (sessions 1-2 artifacts + archived v0 PRD)
   - `23455db` (session 4 part 1): PRD v1, DECISIONS log, Carlos integration, em-dash cleanup
   - `2860f18` (session 4 part 1): threat-model + output-quality reviews of PRD v1
@@ -32,23 +32,17 @@ implementation existence proof, not an effect claim.
   - `7880da1` (session 4 part 2): handoff to v0.5
   - `5c0a741` (session 4 part 3): **PRD v1.2** + DECISIONS D-10/11/12 + Fowler source artifact
   - `68b40be` (session 4 part 3): v1.1 → v1.2 delta-check artifacts (Fowler pass)
+  - `e863c16` (session 4 part 3): handoff to v0.6
+  - `3f739ef` (session 4 part 4): adversarial review (Wolverine + Black Panther) of PRD v1.2
+  - `a8fa349` (session 4 part 4): **PRD v1.3** + DECISIONS D-13 (umbrella for adversarial findings)
+  - `db09b8c` (session 4 part 4): v1.2 → v1.3 delta-check artifacts
     Working tree clean modulo this handoff update.
-- **PRD v1.2** at `docs/PRD.md` (committed `5c0a741`; v1.1 at `b1913eb`; v1 at `23455db`; v0 at `docs/archive/PRD-v0-2026-04-25.md`).
-  v1 addressed 11 drift items + 6 Carlos decisions. v1.1 applied 15 deduplicated edits
-  closing 4 of 4 v1 CRITICAL threat-model findings + 3 cross-cuts. v1.2 (Fowler pass)
-  adds external corroboration (Mohan/Gumbley continuous threat modeling, Ford fitness
-  functions, Johnsson Secure-by-Design) and the §6.1.5 domain-primitives invariant
-  that hardens 5 of v1.1's CRITICAL closures with type-system defense-in-depth. New
-  PRD §15 "External corroboration" enumerates the four converging industry voices.
-  Em-dash discipline maintained: 0 violations against CLAUDE.md rule 7d.1 across all
-  session-3/4 deliverables.
-- **Decision log** at `docs/DECISIONS.md` (committed). ADR-lite format. 12 entries:
-  D-2026-04-26-01..06 (Carlos-driven) + D-07..09 (v1.1: implementation softening,
-  trust-boundary tightening, pipeline expansion) + D-10..12 (v1.2 Fowler:
-  fitness-functions cross-ref, domain-primitives invariant, continuous-threat-modeling
-  framing). Convention: handoff carries session-1 decision headlines (below);
-  DECISIONS.md carries entries from 2026-04-26 onward with full structure
-  (context/options/decision/consequences).
+- **PRD v1.3** at `docs/PRD.md` (committed `a8fa349`; v1.2 at `5c0a741`; v1.1 at `b1913eb`; v1 at `23455db`; v0 at `docs/archive/PRD-v0-2026-04-25.md`). v1 addressed 11 drift items + 6 Carlos decisions. v1.1 closed 4 of 4 v1 CRITICALs + 3 cross-cuts. v1.2 (Fowler pass) added external corroboration + §6.1.5 domain-primitives invariant hardening 5 v1.1 closures. v1.3 (adversarial review pass) closes 10 of 14 Wolverine + Black Panther findings; the 2 CRITICAL re-opens (WV-06 / WV-07 attestation reduces to operator-fatigue-keypress) are HONESTLY DISCLAIMED at PRD-grain with F-Cuttle-FATIGUE in §12 making them empirically falsifiable. New §8 case 9 (backup/restore as trust boundary), new OQ-11 (process isolation) + OQ-12 (PII posture). v0.1 falsifier set now 7 predicates. Em-dash discipline maintained: 0 violations across all session-3/4 deliverables.
+- **Decision log** at `docs/DECISIONS.md` (committed). ADR-lite format. 13 entries:
+  D-01..06 (Carlos) + D-07..09 (v1.1) + D-10..12 (v1.2 Fowler) + D-13 (v1.3
+  adversarial-review umbrella). Convention: handoff carries session-1 decision
+  headlines (below); DECISIONS.md carries entries from 2026-04-26 onward with full
+  structure (context/options/decision/consequences).
 - **Process artifacts** (three-layer discipline: source preservation):
   `process/carlos-arguelles-input.md` (161 lines, committed `23455db`) preserves
   Carlos Arguelles articles. `process/martin-fowler-input.md` (committed `5c0a741`)
@@ -82,76 +76,82 @@ implementation existence proof, not an effect claim.
 
 ## Where to resume
 
-Five paths. The first is immediately gating; the rest can be sequenced.
+Four paths. The first is immediately gating; paths 2 + 3 can run in parallel; path 4 (TDD) is gated on path 1 (v3 sealed).
 
-### 1. Adversarial review (Wolverine + Black Panther) on PRD v1.2 (IMMEDIATE)
+### 1. PRD pruning to v3 (IMMEDIATE)
 
-Per Mo's session-4 expansion ("don't stop until I explicitly interrupt you ...
-continue working on the PRD and then start implementation if it makes sense.
-Use your judgement"). After v1.2 lands, the higher-value next move is the
-adversarial review the threat-model skill itself queued (Step 8 deferred per
-`docs/threat-model-prd-v1.md`), not Karpathy. Reasoning: v1.2 is dense and
-externally anchored (Carlos + Mohan/Gumbley + Ford + Johnsson per §15);
-adversarial attack tests defensibility, while Karpathy adds another corroborating
-voice. Adversarial dominates.
+Promoted from path #3 in handoff-0.6 after adversarial review + v1.3 closed
+the prior path #1 (commits `3f739ef` + `a8fa349` + `db09b8c`). PRD v1.3 is
+~340 lines with three review cycles of accreted cross-references; the
+framework's "third version is shorter and trustworthy" discipline
+(`framework_methodology_document.md:34, 72`) calls for a pruning pass:
 
-Run Wolverine + Black Panther personas per the threat-model skill's Step 8
-methodology against PRD v1.2 directly (no Codex/Gemini external duel needed at
-this grain). Output `docs/adversarial-review-prd-v1.2.md` with: WOLVERINE
-findings (missed attack paths, mitigation bypasses, score challenges, detection
-gaps), BLACK PANTHER findings (structural flaws, missing components, trust
-boundary failures, mitigation feasibility, shared-fate risks, compliance gaps),
-remediation log. Then PRD v2 incorporates load-bearing findings.
+- Remove cross-references that no longer load-bear (e.g., D-### entries
+  cited multiple times where one cite is enough).
+- Tighten prose where v1 / v1.1 / v1.2 / v1.3 layered hedges have piled up.
+- Move TDD-grain detail out of PRD bullets and into a single "TDD scope
+  inheritance" section if it becomes its own surface.
+- Preserve all PRD-grain commitments verbatim; pruning is rewording, not
+  rescoping.
 
-If adversarial review surfaces new CRITICAL findings → PRD v1.3 then v2 after
-delta-check, then pruning to v3.
+Output: PRD v3, ready for sealing. Then sealed-falsifier pre-registration in
+`docs/falsifiers.md` (PRD §12, now 7 predicates) becomes immutable. Then
+TDD start (path #3, formerly path #5).
+
+If pruning surfaces structural issues that warrant another review pass,
+v3 → v3.1 → seal. Otherwise v3 is the seal candidate.
 
 ### 2. Karpathy review (parallel stream; deferred from v0.5 path #1)
 
 Apply Karpathy's lens against Cuttle's bedrock thesis. Read karpathy.ai +
 public AI/eng writing (talks, blog posts, GitHub READMEs, twitter/X long-form).
 Three-layer artifact discipline: `process/karpathy-input.md` source preservation
-→ `docs/DECISIONS.md` entries from D-2026-04-26-13 onward → fold into PRD as a
-later revision or §15 row update.
+→ `docs/DECISIONS.md` entries from D-2026-04-26-14 onward → fold into PRD as a
+later revision (post-pruning would target v3.1) or §15 row update.
 
 Anti-goal: do NOT compare Cuttle to nanoGPT or Karpathy's tooling. Single-target
 lens per `feedback_review_as_lens_not_comparator.md`.
 
-Lower priority than path #1: Karpathy adds a fifth corroborating voice to
-§15 if his lens converges; less likely to surface new security findings the
-threat-model + Fowler/Secure-by-Design pass already caught. Can run in parallel
-with paths #3 and #4.
+Lower priority than path #1 (pruning): adversarial review already attacked v1.2
+defensibility from Wolverine + Black Panther angles; Karpathy's lens is
+complementary not redundant but not on the critical path to v3 seal. Can run
+in parallel with path #1 (pruning) if a parallel agent is available, or
+queued for post-seal.
 
-### 3. PRD pruning to v3
-
-Per `framework_methodology_document.md:34, 72`: "third version is shorter and
-trustworthy." Output: PRD v3, ready for sealing. Then sealed-falsifier
-pre-registration in `docs/falsifiers.md` (PRD §12) becomes immutable.
-
-### 4. Framework-doc updates from Carlos (parallel stream)
+### 3. Framework-doc updates from Carlos + Fowler (parallel stream)
 
 Mo's directive 2026-04-26: "start updating our framework docs based on what we
 learn." Two homes:
 
-- **Cuttle-side memory**: note Carlos corroboration in
-  `framework_components.md` re: substrate-constraint thesis. Possibly new sidecar
-  `framework_external_corroboration.md` tracking all independent industry/academic
-  convergence.
+- **Cuttle-side memory**: note Carlos + Mohan/Gumbley + Ford + Johnsson
+  corroboration in `framework_components.md` re: substrate-constraint thesis.
+  New sidecar `framework_external_corroboration.md` tracking all independent
+  industry/academic convergence (sourced from `process/carlos-arguelles-input.md`
+  - `process/martin-fowler-input.md` "Convergent thesis" table).
 - **claude-study side**: propose new sidecar
   `~/claude-study/papers/external-convergence.md` tracking corroboration +
   identified gaps. Do NOT touch canonical `paper-agent-framework.md` directly
   (sealed artifact per methodology).
 
-Can run in parallel with paths 1-3.
+Can run in parallel with paths #1 + #2.
 
-### 5. TDD start (gated on PRD v3)
+### 4. TDD start (gated on PRD v3 sealed)
 
-Only after PRD reaches v3 (post-adversarial, post-pruning, sealed). Resolves
-OQ-1 through OQ-6 + OQ-9 (per PRD v1.1 §10). Decisions there feed `system-design`
-and `api-design` skill outputs, then implementation. v1.1 added new TDD-grain
-sub-surfaces flagged in `docs/threat-model-prd-v1.1-delta.md` ("New surface
-introduced by v1.1 edits"): TTY-provenance primitive, memory quarantine area,
-L5 review queue storage, nested-harness lockfile.
+Only after PRD reaches v3 (post-pruning, sealed). Resolves OQ-1 through OQ-12
+(per PRD v1.3 §10, expanded). Decisions there feed `system-design` and
+`api-design` skill outputs, then implementation. TDD-grain sub-surfaces inherited
+from session-4 review passes:
+
+- v1.1 delta: TTY-provenance primitive, memory quarantine area, L5 review
+  queue storage, nested-harness lockfile.
+- v1.2 delta (Fowler): constructor authorization (capability scoping),
+  serialization round-trip for domain primitives, FFI/native-binding boundary.
+- v1.3 delta (adversarial): tool-registration tagging contract for audit-log
+  digest, state-coherence file integrity (recursive), per-attestation model-
+  context logging (privacy-sensitive; OQ-12 must address).
+
+v0.1 implementation begins after seal + TDD §1 (OQ-1 language) + §2 (config /
+data model) + §3 (policy gate) + §4 (sandbox) + §5 (audit log) decisions.
 
 ## Anti-goal for resume
 
@@ -248,9 +248,9 @@ setup against the 5-layer framework. Invoke with: `Read /Users/m0qazi/claude-stu
 
 **Artifacts on disk (sessions 3 + 4, all committed):**
 
-- `docs/PRD.md` (v1.2; committed `5c0a741`; v1.1 at `b1913eb`; v1 baseline at `23455db`). v0 archived at `docs/archive/PRD-v0-2026-04-25.md`.
+- `docs/PRD.md` (v1.3; committed `a8fa349`; v1.2 at `5c0a741`; v1.1 at `b1913eb`; v1 baseline at `23455db`). v0 archived at `docs/archive/PRD-v0-2026-04-25.md`.
 - `docs/DECISIONS.md` (committed `23455db` + `b1913eb` + `5c0a741`). ADR-lite log;
-  12 entries: D-01..06 (Carlos) + D-07..09 (v1.1) + D-10..12 (v1.2 Fowler).
+  13 entries: D-01..06 (Carlos) + D-07..09 (v1.1) + D-10..12 (v1.2 Fowler) + D-13 (v1.3 adversarial umbrella).
 - `process/carlos-arguelles-input.md` (161 lines, committed `23455db`). Carlos source.
 - `process/martin-fowler-input.md` (committed `5c0a741`). Mohan/Gumbley + Ford + Johnsson source.
 - `docs/threat-model-prd-v1.md` (committed `2860f18`). v1 PRD-grain STRIDE+ register;
@@ -264,6 +264,14 @@ setup against the 5-layer framework. Invoke with: `Read /Users/m0qazi/claude-stu
   (committed `68b40be`). Verifies v1.1 → v1.2: zero new attack surface; 5 prior
   closures hardened by §6.1.5 domain-primitives invariant; 3 new TDD sub-surfaces
   (constructor authorization, serialization round-trip, FFI/native-binding boundary).
+- `docs/adversarial-review-prd-v1.2.md` (committed `3f739ef`). Wolverine + Black
+  Panther review of PRD v1.2; 7 + 7 findings (3 Wolverine CRITICAL re-opens
+  T-001/T-007/T-008; 7 Black Panther structural). Authoritative per-finding source for D-13.
+- `docs/threat-model-prd-v1.3-delta.md` + `docs/output-quality-prd-v1.3-delta.md`
+  (committed `db09b8c`). Verifies v1.2 → v1.3: 10 PRD-grain closures + 2 TDD-deferred;
+  WV-06/WV-07 honestly disclaimed (operator-fatigue-keypress not solved at per-attestation
+  grain). 3 new TDD sub-surfaces (tool-registration tagging, state-coherence file
+  recursive integrity, per-attestation model-context logging privacy-sensitive).
 
 ## What this handoff intentionally omits
 
