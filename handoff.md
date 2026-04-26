@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.7 (after session 4 adversarial review + PRD v1.3 + delta-check, 2026-04-26)
+**Version**: handoff-0.8 (after session 4 PRD v3 (pruning) + sealed falsifiers, 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -22,27 +22,20 @@ implementation existence proof, not an effect claim.
 
 ## State at end of session 4 (2026-04-26)
 
-- **Repository**: `/Users/m0qazi/cuttle`. 12 commits on `main`:
-  - `16bc70e` seed (sessions 1-2 artifacts + archived v0 PRD)
-  - `23455db` (session 4 part 1): PRD v1, DECISIONS log, Carlos integration, em-dash cleanup
-  - `2860f18` (session 4 part 1): threat-model + output-quality reviews of PRD v1
-  - `205f151` (session 4 part 1): handoff to v0.4
-  - `b1913eb` (session 4 part 2): **PRD v1.1** + DECISIONS D-07/08/09
-  - `527a399` (session 4 part 2): v1 → v1.1 delta-check artifacts
-  - `7880da1` (session 4 part 2): handoff to v0.5
-  - `5c0a741` (session 4 part 3): **PRD v1.2** + DECISIONS D-10/11/12 + Fowler source artifact
-  - `68b40be` (session 4 part 3): v1.1 → v1.2 delta-check artifacts (Fowler pass)
-  - `e863c16` (session 4 part 3): handoff to v0.6
-  - `3f739ef` (session 4 part 4): adversarial review (Wolverine + Black Panther) of PRD v1.2
-  - `a8fa349` (session 4 part 4): **PRD v1.3** + DECISIONS D-13 (umbrella for adversarial findings)
-  - `db09b8c` (session 4 part 4): v1.2 → v1.3 delta-check artifacts
+- **Repository**: `/Users/m0qazi/cuttle`. 16 commits on `main` (latest five from session 4 part 5):
+  - `16bc70e` seed (sessions 1-2)
+  - Part 1 (PRD v1 baseline + reviews + handoff v0.4): `23455db`, `2860f18`, `205f151`
+  - Part 2 (PRD v1.1 + delta + handoff v0.5): `b1913eb`, `527a399`, `7880da1`
+  - Part 3 (PRD v1.2 Fowler + delta + handoff v0.6): `5c0a741`, `68b40be`, `e863c16`
+  - Part 4 (adversarial review + PRD v1.3 + delta + handoff v0.7): `3f739ef`, `a8fa349`, `db09b8c`, `baa0dc9`
+  - Part 5 (PRD v3 pruning + sealed falsifiers + delta): `4f0ffbb`, `2ce8b1b`, `a9252c6`
     Working tree clean modulo this handoff update.
-- **PRD v1.3** at `docs/PRD.md` (committed `a8fa349`; v1.2 at `5c0a741`; v1.1 at `b1913eb`; v1 at `23455db`; v0 at `docs/archive/PRD-v0-2026-04-25.md`). v1 addressed 11 drift items + 6 Carlos decisions. v1.1 closed 4 of 4 v1 CRITICALs + 3 cross-cuts. v1.2 (Fowler pass) added external corroboration + §6.1.5 domain-primitives invariant hardening 5 v1.1 closures. v1.3 (adversarial review pass) closes 10 of 14 Wolverine + Black Panther findings; the 2 CRITICAL re-opens (WV-06 / WV-07 attestation reduces to operator-fatigue-keypress) are HONESTLY DISCLAIMED at PRD-grain with F-Cuttle-FATIGUE in §12 making them empirically falsifiable. New §8 case 9 (backup/restore as trust boundary), new OQ-11 (process isolation) + OQ-12 (PII posture). v0.1 falsifier set now 7 predicates. Em-dash discipline maintained: 0 violations across all session-3/4 deliverables.
-- **Decision log** at `docs/DECISIONS.md` (committed). ADR-lite format. 13 entries:
+- **PRD v3** at `docs/PRD.md` (committed `4f0ffbb`; v1.3 at `a8fa349`; v1.2 at `5c0a741`; v1.1 at `b1913eb`; v1 at `23455db`; v0 at `docs/archive/PRD-v0-2026-04-25.md`). v3 = post-pruning of v1.3 (= v2 per §11 versioning convention). 319 lines (was 336 in v1.3). All PRD-grain commitments preserved verbatim per `docs/threat-model-prd-v3-delta.md` audit; pruning targeted redundant cross-references and the §11 convention text. v3 is the seal candidate; FIX-DOCS at end of REVIEW-1 + REVIEW-2 produces the Accepted version. **Sealed-falsifier pre-registration** at `docs/falsifiers.md` (committed `2ce8b1b`) in pre-seal-draft state with all 7 predicates (F-Cuttle-DISABLE / BEDROCK / SUBSTRATE / OPTION-C / SNAPSHOT-DRIFT / MEMORY-DRIFT / FATIGUE) structurally locked; threshold refinements permitted up to v0.1 ship.
+- **Decision log** at `docs/DECISIONS.md` (committed). ADR-lite format. 14 entries:
   D-01..06 (Carlos) + D-07..09 (v1.1) + D-10..12 (v1.2 Fowler) + D-13 (v1.3
-  adversarial-review umbrella). Convention: handoff carries session-1 decision
-  headlines (below); DECISIONS.md carries entries from 2026-04-26 onward with full
-  structure (context/options/decision/consequences).
+  adversarial-review umbrella) + D-14 (v3 pruning umbrella). Convention: handoff
+  carries session-1 decision headlines (below); DECISIONS.md carries entries from
+  2026-04-26 onward with full structure (context/options/decision/consequences).
 - **Process artifacts** (three-layer discipline: source preservation):
   `process/carlos-arguelles-input.md` (161 lines, committed `23455db`) preserves
   Carlos Arguelles articles. `process/martin-fowler-input.md` (committed `5c0a741`)
@@ -76,30 +69,46 @@ implementation existence proof, not an effect claim.
 
 ## Where to resume
 
-Four paths. The first is immediately gating; paths 2 + 3 can run in parallel; path 4 (TDD) is gated on path 1 (v3 sealed).
+Three paths. Path 1 (TDD) is on the critical path to implementation; paths 2 + 3 are parallel-stream and can run before, during, or after path 1.
 
-### 1. PRD pruning to v3 (IMMEDIATE)
+### 1. TDD start (IMMEDIATE)
 
-Promoted from path #3 in handoff-0.6 after adversarial review + v1.3 closed
-the prior path #1 (commits `3f739ef` + `a8fa349` + `db09b8c`). PRD v1.3 is
-~340 lines with three review cycles of accreted cross-references; the
-framework's "third version is shorter and trustworthy" discipline
-(`framework_methodology_document.md:34, 72`) calls for a pruning pass:
+Promoted from path #4 in handoff-0.7 after PRD v3 + sealed falsifiers closed
+the prior path #1 (commits `4f0ffbb` + `2ce8b1b` + `a9252c6`). PRD v3 is the
+seal candidate; the next critical-path step toward implementation is the TDD.
 
-- Remove cross-references that no longer load-bear (e.g., D-### entries
-  cited multiple times where one cite is enough).
-- Tighten prose where v1 / v1.1 / v1.2 / v1.3 layered hedges have piled up.
-- Move TDD-grain detail out of PRD bullets and into a single "TDD scope
-  inheritance" section if it becomes its own surface.
-- Preserve all PRD-grain commitments verbatim; pruning is rewording, not
-  rescoping.
+Resolve OQ-1 through OQ-6, OQ-9, OQ-11, OQ-12 (per PRD v3 §10). Suggested
+section structure:
 
-Output: PRD v3, ready for sealing. Then sealed-falsifier pre-registration in
-`docs/falsifiers.md` (PRD §12, now 7 predicates) becomes immutable. Then
-TDD start (path #3, formerly path #5).
+- **TDD §1: Language choice (OQ-1).** PRD v3 §9 already leans Rust > Go > TS
+  (CC-2 zeroization + §6.1.5 nominal-type domain primitives). Rust is the
+  defensible default unless Mo signals otherwise.
+- **TDD §2: Config + data model (OQ-6).** Domain-primitive enumeration per v3
+  §6.1.5 candidates (`ApiKey`, `AttestationBody`, `HelperHash`, `LockfilePath`,
+  `TierClassification`, `OperatorAuthoredText` vs `ModelAuthoredText`).
+  Constructor capability scoping (per WV-01). `CredentialRecord` schema
+  extension with `helper_hash` field. Config file location.
+- **TDD §3: Policy gate (OQ-2, OQ-9, OQ-11).** Largest section. Supervisor +
+  fail-closed restart contract (CC-1). TTY-input vs model-emit primitive
+  (T-001). Allow/Warn/Deny graduation (OQ-9). Process-isolation model (OQ-11).
+  Lockfile authentication mechanism (WV-02). Keychain prompt-rate budget
+  (BP-05). Falsifier thresholds (N, M, R, R_F, X) per `docs/falsifiers.md`
+  TDD-refinement scope. Predicate maintenance subsection.
+- **TDD §4: Sandbox primitive (OQ-3).** sandbox-exec contingency (T-005);
+  Endpoint Security framework / hypervisor / Apple Virtualization options.
+- **TDD §5: Audit log (OQ-4, OQ-12).** HMAC vs Merkle scheme. Tool-registration
+  tagging contract for `secret_bearing` flag. Aggregation contract for
+  telemetry. PII posture (OQ-12). State-coherence file integrity (recursive,
+  per v3 §8 case 9). Fitness-function automated evaluator scope (BP-02).
+- **TDD §6: Memory.** Quarantine layout. Per-session vs per-project. Promotion
+  workflow.
 
-If pruning surfaces structural issues that warrant another review pass,
-v3 → v3.1 → seal. Otherwise v3 is the seal candidate.
+After TDD lands: REVIEW-1 (`code-review` skill on PRD + TDD) → REVIEW-2
+(`legal-review` + `threat-model` + `privacy`) → FIX-DOCS → DESIGN
+(`system-design` skill) → API (`api-design` skill) → Implementation begins.
+
+If TDD review surfaces incremental findings against PRD v3, FIX-DOCS produces
+the Accepted PRD; otherwise v3 stands as Accepted.
 
 ### 2. Karpathy review (parallel stream; deferred from v0.5 path #1)
 
@@ -135,23 +144,25 @@ learn." Two homes:
 
 Can run in parallel with paths #1 + #2.
 
-### 4. TDD start (gated on PRD v3 sealed)
+### TDD scope inheritance (cross-cutting reference for path #1)
 
-Only after PRD reaches v3 (post-pruning, sealed). Resolves OQ-1 through OQ-12
-(per PRD v1.3 §10, expanded). Decisions there feed `system-design` and
-`api-design` skill outputs, then implementation. TDD-grain sub-surfaces inherited
-from session-4 review passes:
+TDD-grain sub-surfaces flagged across session-4 review passes; path #1 (TDD
+start) inherits all of these as work-items:
 
 - v1.1 delta: TTY-provenance primitive, memory quarantine area, L5 review
   queue storage, nested-harness lockfile.
 - v1.2 delta (Fowler): constructor authorization (capability scoping),
   serialization round-trip for domain primitives, FFI/native-binding boundary.
 - v1.3 delta (adversarial): tool-registration tagging contract for audit-log
-  digest, state-coherence file integrity (recursive), per-attestation model-
-  context logging (privacy-sensitive; OQ-12 must address).
+  digest, state-coherence file integrity (recursive), per-attestation
+  model-context logging (privacy-sensitive; OQ-12 must address).
+- v3 delta (pruning): F-Cuttle-FATIGUE detection requires per-attestation
+  logging contract that intersects OQ-12; falsifier threshold refinement
+  (N, M, R, R_F, X) per `docs/falsifiers.md`.
 
-v0.1 implementation begins after seal + TDD §1 (OQ-1 language) + §2 (config /
-data model) + §3 (policy gate) + §4 (sandbox) + §5 (audit log) decisions.
+v0.1 implementation begins after path #1 TDD + REVIEW-1 + REVIEW-2 + FIX-DOCS
+
+- DESIGN + API.
 
 ## Anti-goal for resume
 
@@ -248,9 +259,10 @@ setup against the 5-layer framework. Invoke with: `Read /Users/m0qazi/claude-stu
 
 **Artifacts on disk (sessions 3 + 4, all committed):**
 
-- `docs/PRD.md` (v1.3; committed `a8fa349`; v1.2 at `5c0a741`; v1.1 at `b1913eb`; v1 baseline at `23455db`). v0 archived at `docs/archive/PRD-v0-2026-04-25.md`.
-- `docs/DECISIONS.md` (committed `23455db` + `b1913eb` + `5c0a741`). ADR-lite log;
-  13 entries: D-01..06 (Carlos) + D-07..09 (v1.1) + D-10..12 (v1.2 Fowler) + D-13 (v1.3 adversarial umbrella).
+- `docs/PRD.md` (v3 sealed candidate; committed `4f0ffbb`; v1.3 at `a8fa349`; v1.2 at `5c0a741`; v1.1 at `b1913eb`; v1 baseline at `23455db`). v0 archived at `docs/archive/PRD-v0-2026-04-25.md`.
+- `docs/DECISIONS.md` (committed across `23455db`, `b1913eb`, `5c0a741`, `a8fa349`, `4f0ffbb`). ADR-lite log;
+  14 entries: D-01..06 (Carlos) + D-07..09 (v1.1) + D-10..12 (v1.2 Fowler) + D-13 (v1.3 adversarial umbrella) + D-14 (v3 pruning umbrella).
+- `docs/falsifiers.md` (committed `2ce8b1b`). Sealed-falsifier pre-registration in pre-seal-draft state. 7 predicates, structural shape locked, threshold values refined in TDD.
 - `process/carlos-arguelles-input.md` (161 lines, committed `23455db`). Carlos source.
 - `process/martin-fowler-input.md` (committed `5c0a741`). Mohan/Gumbley + Ford + Johnsson source.
 - `docs/threat-model-prd-v1.md` (committed `2860f18`). v1 PRD-grain STRIDE+ register;
@@ -272,6 +284,10 @@ setup against the 5-layer framework. Invoke with: `Read /Users/m0qazi/claude-stu
   WV-06/WV-07 honestly disclaimed (operator-fatigue-keypress not solved at per-attestation
   grain). 3 new TDD sub-surfaces (tool-registration tagging, state-coherence file
   recursive integrity, per-attestation model-context logging privacy-sensitive).
+- `docs/threat-model-prd-v3-delta.md` + `docs/output-quality-prd-v3-delta.md`
+  (committed `a9252c6`). Verifies v1.3 → v3 pruning preserved every PRD-grain
+  commitment verbatim. Section-by-section audit. Zero new attack surface from
+  pruning; §11 versioning convention rewritten honestly.
 
 ## What this handoff intentionally omits
 
