@@ -1,0 +1,16 @@
+[package]
+name = "cuttle-skills"
+version = "0.0.5"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle skills loader: Unicode allowlist + fail-closed-on-novel-category. Per docs/TDD.md §3 + WV-05 / D-25."
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
