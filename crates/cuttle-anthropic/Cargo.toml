@@ -1,0 +1,21 @@
+[package]
+name = "cuttle-anthropic"
+version = "0.0.8"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle Anthropic API client. Thin wrapper over reqwest+serde per TDD §1; no third-party Anthropic SDK in v0.1 (supply-chain risk per PRD §9). v0.0.8 = domain types + non-streaming messages() + retry policy. Streaming + prompt-cache deferred."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+url.workspace = true
+cuttle-credential = { path = "../cuttle-credential" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
