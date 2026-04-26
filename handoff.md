@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.3 (after session 3 PRD v1 + DECISIONS log + Carlos integration, 2026-04-26)
+**Version**: handoff-0.4 (after session 4 em-dash cleanup, commits, threat-model + output-quality reviews of PRD v1, 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -20,34 +20,43 @@ instead of _behind_ it, because the substrate is no longer the bottleneck. v0.1 
 single-operator, CLI-only, Anthropic-API-key-only (ToS-clean), and ships as an
 implementation existence proof, not an effect claim.
 
-## State at end of session 3 (2026-04-26)
+## State at end of session 4 (2026-04-26)
 
-- **Repository**: `/Users/m0qazi/cuttle`. 1 commit on `main` (`16bc70e` seed,
-  containing handoff + sessions + process + archived v0 PRD). Session 3 PRD v1,
-  DECISIONS log, Carlos source artifact, and two new memory files were authored
-  but had not yet committed at the snapshot point (PreToolUse skill-gate hook
-  blocked the second commit pending threat-model + output-quality skill markers;
-  see "Where to resume" path #1 below).
-- **PRD v1** at `docs/PRD.md` (302 lines). Replaces v0 (now at `docs/archive/PRD-v0-2026-04-25.md`).
+- **Repository**: `/Users/m0qazi/cuttle`. 3 commits on `main`:
+  - `16bc70e` seed (sessions 1-2 artifacts + archived v0 PRD)
+  - `23455db` (session 4): PRD v1, DECISIONS log, Carlos integration, em-dash cleanup
+  - `2860f18` (session 4): threat-model + output-quality reviews of PRD v1
+    Working tree clean modulo this handoff update.
+- **PRD v1** at `docs/PRD.md` (302 lines, committed). Replaces v0 (now at `docs/archive/PRD-v0-2026-04-25.md`).
   Addresses all 11 drift items from `sessions/2026-04-25-session-1-snapshot.md` §4
   plus 6 Carlos-derived decisions (D-2026-04-26-01 through D-2026-04-26-06). Adds
   three new sections (§12 sealed falsifier pre-registration; §13 content-vs-guidance;
-  §14 dual use of framework). Carries one self-flagged cleanup task: 18 em-dash
-  violations against CLAUDE.md rule 7d.1, identified post-write, fix queued.
-- **Decision log** at `docs/DECISIONS.md` (189 lines). New file. ADR-lite format.
+  §14 dual use of framework). Em-dash cleanup landed; 0 violations against CLAUDE.md
+  rule 7d.1 across all session-3/4 deliverables.
+- **Decision log** at `docs/DECISIONS.md` (189 lines, committed). ADR-lite format.
   Seeds with 6 Carlos-driven entries. Convention: handoff carries session-1
   decision headlines (below); DECISIONS.md carries entries from 2026-04-26 onward
-  with full structure (context/options/decision/consequences). Carries 7 em-dash
-  violations queued for the same cleanup pass.
-- **Process artifact** at `process/carlos-arguelles-input.md` (161 lines). New
-  file. Preserves the Carlos Arguelles source material (3 articles, verbatim
-  quotes where load-bearing) so PRD does not carry citation weight inline.
-  Three-layer separation: process/ source → DECISIONS.md decisions → PRD.md
-  implementation.
-- **Project memory**: 14 files (was 12), 560 lines (was 523). Two new feedback
-  memories from session 3: `feedback_save_memory_at_intervals.md` (19 lines)
-  and `feedback_handoff_between_context_switches.md` (18 lines). Largest file
-  unchanged at 136 lines. No file approaches 200-line truncation ceiling.
+  with full structure (context/options/decision/consequences).
+- **Process artifact** at `process/carlos-arguelles-input.md` (161 lines, committed).
+  Preserves the Carlos Arguelles source material (3 articles, verbatim quotes
+  where load-bearing) so PRD does not carry citation weight inline. Three-layer
+  separation: process/ source → DECISIONS.md decisions → PRD.md implementation.
+- **Threat model of PRD v1** at `docs/threat-model-prd-v1.md` (committed in 2860f18).
+  PRD-grain STRIDE+ register on the 7 declared concerns. 10 threats (4 CRITICAL:
+  T-001 skill prompt-injection coerces Option C bypass, T-007 MEMORY.md poisoning,
+  T-002 apiKeyHelper script as beachhead, T-009 exception-table-as-bypass-map,
+  T-004 nested-harness env-var escape). 3 cross-cutting findings (CC-1 fail-closed
+  on gate crash, CC-2 in-memory key zeroization, CC-3 privacy-skill missing from §11).
+  12 required PRD v1.1 edits enumerated. Wolverine + Black Panther adversarial
+  review deferred to path #3 against PRD v2.
+- **Output-quality review of PRD v1** at `docs/output-quality-prd-v1.md` (committed
+  in 2860f18). PRD passes structural checklist (who/what/why-now/SC/non-goals/edge-
+  cases all PASS). 0 BLOCK, 5 FIX-BEFORE-V2, 5 NICE-TO-HAVE. Top finding (OQ-FIX-1):
+  PRD v1 §6.1.1 silently closes OQ-3 and OQ-4 while §10 still lists them open.
+- **Project memory**: 14 files, 560 lines (unchanged from session 3). No new
+  feedback rules learned in session 4 (existing rules executed cleanly: decisive
+  execution, save-memory-at-intervals, handoff-between-context-switches all
+  applied).
 - **No code, no tests, no architecture diagrams, no TDD.** Pipeline still gated
   on PRD reaching v3 (post-adversarial-review + post-pruning) per global CLAUDE.md
   SYSTEM-tier ceremony.
@@ -56,28 +65,49 @@ implementation existence proof, not an effect claim.
 
 Six paths. The first is immediately gating; the rest can be sequenced.
 
-### 1. Em-dash cleanup pass + commit session-3 artifacts (IMMEDIATE)
+### 1. PRD v1.1 punchlist application (IMMEDIATE)
 
-Session 3 left 4 uncommitted artifacts (`docs/PRD.md` v1, `docs/DECISIONS.md`,
-`process/carlos-arguelles-input.md`, two new memory files). Commit was blocked by
-PreToolUse skill-gate hook (threat-model + output-quality markers missing) and by
-self-flagged em-dash violations (18 in PRD, 7 in DECISIONS) against CLAUDE.md rule
-7d.1.
+Replaces session-3 path #1 (em-dash cleanup + commits), which closed in session 4
+with commits `23455db` and `2860f18`. The PRD v1 reviews produced two punchlists
+that should be applied in a single PRD edit pass before Karpathy or adversarial
+review touches the doc.
 
-Sequence:
+Sources:
 
-1. Em-dash cleanup pass on `docs/PRD.md` and `docs/DECISIONS.md`. Replace with
-   commas, parens, colons, semicolons, or sentence breaks per rule 7d.1. Carlos
-   source artifact has fewer; check it too.
-2. Run `threat-model` skill against `docs/PRD.md` §6 (genuine new security
-   architecture being declared in v0.1 scope). Refreshes `/tmp/.claude-threat-model-gate`.
-3. Run `output-quality` skill against `docs/PRD.md`. Refreshes
-   `/tmp/.claude-output-quality-gate`.
-4. Stage by specific path (no `-A`): PRD, DECISIONS, archive (already in seed),
-   process artifact, two memory files. Note memory files live OUTSIDE the cuttle
-   repo at `~/.claude/projects/-Users-m0qazi-cuttle/memory/` and are not staged
-   here; they live in the global memory store, not git.
-5. Commit. Suggested subject: `docs: PRD v1 + DECISIONS log + Carlos integration`.
+- `docs/threat-model-prd-v1.md` "Required PRD v1.1 edits" section (12 numbered items).
+- `docs/output-quality-prd-v1.md` "Action summary for PRD v1.1 author" section
+  (5 FIX-BEFORE-V2 items, deduplicated against the threat-model list).
+
+Highest-priority items (deduplicated, citing source IDs):
+
+1. §6.1.1 substrate: declare policy gate fails closed on gate-process death (CC-1).
+2. §6.1.1 credential vault: in-memory key zeroization on session end + panic (CC-2).
+3. §6.1.1 audit log: soften HMAC commitment OR resolve OQ-4 in §10 (T-003 + OQ-FIX-1).
+4. §6.1.1 sandbox: soften sandbox-exec commitment OR resolve OQ-3 in §10 (OQ-FIX-1).
+5. §6.1.1 apiKeyHelper: helper-hash recorded in `CredentialRecord`, mismatch refuses,
+   sandboxed network egress (T-002).
+6. §6.1.1 auto-memory + new §6.1.5 invariant: cross-session memory framed untrusted
+   until operator promotes; quarantine workflow (T-007).
+7. §6.1.5 escape-hatch invariant: exception tables operator-runtime-loaded, not
+   distributed; never model-readable (T-009).
+8. §6.1.6 telemetry: forward-ref to TDD §5 aggregation requirement; declare ACL on
+   local telemetry store (T-008 + OQ-FIX-5).
+9. §8 case 1: Option C attestation bodies require out-of-band TTY operator input,
+   not model-generated text (T-001).
+10. §8 case 6: nested-harness detection uses lockfile / process-tree, not env-var.
+    Fail-closed on inheritance failure (T-004).
+11. §6.1.2 L5: registry writes go through operator review queue; signed provenance (T-010).
+12. §11 step 3 (REVIEW-2): include `privacy` skill alongside legal-review and
+    threat-model (CC-3).
+13. §3.2: sharpen unhedged "never" claim (OQ-FIX-3).
+14. §6.1.2 v0.N column: name a falsifier signal or SC-equivalent per row (OQ-FIX-4).
+15. §12 falsifier set: add F-Cuttle-SNAPSHOT-DRIFT (T-006), F-Cuttle-MEMORY-DRIFT
+    (T-007), expand F-Cuttle-DISABLE to cover HMAC re-keying (T-003).
+
+Output: PRD v1.1 (single revision), DECISIONS.md gains entries D-2026-04-26-07
+through D-2026-04-26-N for the load-bearing PRD edits that change a previously
+declared decision (e.g., audit-log scheme choice). Re-run threat-model and
+output-quality against v1.1 before commit.
 
 ### 2. Karpathy review (Mo queued 2026-04-26)
 
@@ -218,14 +248,18 @@ above 200 lines. Largest unchanged at 136 lines, comfortably under the ceiling.
 (203 lines). Reviewer-prompt for a fresh Claude Code session to audit any Claude Code
 setup against the 5-layer framework. Invoke with: `Read /Users/m0qazi/claude-study/review-claude-code-setup.md and review the Claude Code setup at <target>`.
 
-**New artifacts on disk (session 3, uncommitted at snapshot):**
+**Artifacts on disk (sessions 3 + 4, all committed):**
 
-- `docs/PRD.md` (v1, 302 lines). v0 archived at `docs/archive/PRD-v0-2026-04-25.md`.
-- `docs/DECISIONS.md` (189 lines). ADR-lite parallel decision log; seeds with
-  D-2026-04-26-01 through D-2026-04-26-06 (Carlos-driven).
-- `process/carlos-arguelles-input.md` (161 lines). Source artifact preserving
-  Carlos Arguelles Medium articles (URLs, verbatim quotes, what was used vs set
-  aside).
+- `docs/PRD.md` (v1, 302 lines, committed `23455db`). v0 archived at `docs/archive/PRD-v0-2026-04-25.md`.
+- `docs/DECISIONS.md` (189 lines, committed `23455db`). ADR-lite parallel decision
+  log; seeds with D-2026-04-26-01 through D-2026-04-26-06 (Carlos-driven).
+- `process/carlos-arguelles-input.md` (161 lines, committed `23455db`). Source
+  artifact preserving Carlos Arguelles Medium articles (URLs, verbatim quotes,
+  what was used vs set aside).
+- `docs/threat-model-prd-v1.md` (committed `2860f18`). PRD-grain STRIDE+ register;
+  10 threats (4 CRITICAL); 12 required PRD v1.1 edits enumerated.
+- `docs/output-quality-prd-v1.md` (committed `2860f18`). 0 BLOCK / 5 FIX-BEFORE-V2
+  / 5 NICE-TO-HAVE; PRD passes structural checklist.
 
 ## What this handoff intentionally omits
 
@@ -239,25 +273,28 @@ setup against the 5-layer framework. Invoke with: `Read /Users/m0qazi/claude-stu
 
 ```
 I'm resuming Cuttle. Read handoff.md first, then the project memory at
-/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/. Memory grew in
-session 3 (2026-04-26) to 14 files; new feedback rules govern long-session
-discipline (save memory at intervals; update handoff between context switches).
+/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/. Memory has 14
+files; feedback rules govern long-session discipline (save memory at intervals;
+update handoff between context switches; decisive execution when evidence-grounded).
 Cite memory line numbers, don't re-derive.
 
-Recommended first move: handoff.md "Where to resume" path #1 (em-dash cleanup
-pass + commit session-3 artifacts). Four files were authored but uncommitted
-at snapshot: docs/PRD.md (v1, 302 lines), docs/DECISIONS.md (189 lines),
-process/carlos-arguelles-input.md (161 lines), and two memory files outside
-the cuttle repo. Self-flagged 18 em-dash violations in PRD and 7 in DECISIONS
-against CLAUDE.md rule 7d.1; clean those before committing. PreToolUse hook
-will require threat-model and output-quality skill markers; run them on
-PRD §6 (security architecture) and PRD whole-doc (structured deliverable)
-before the commit attempt.
+Repo state: 3 commits on main. Session 4 closed with 23455db (PRD v1 +
+DECISIONS + Carlos integration + em-dash cleanup) and 2860f18 (threat-model +
+output-quality reviews of PRD v1). Working tree clean.
 
-After commit lands, path #2 (Karpathy review) is queued by Mo. Three-layer
+Recommended first move: handoff.md "Where to resume" path #1 (PRD v1.1
+punchlist application). Two reviews produced 15 deduplicated edits queued
+against PRD v1; threat-model lists 12 required edits, output-quality lists 5
+FIX-BEFORE-V2 (overlap noted). Highest-priority: §6.1.1 fail-closed gate,
+in-memory key zeroization, soften OQ-3/OQ-4 commitments OR resolve them in §10,
+and §8 case 1 Option C attestation must be TTY-input not model-text. Output is
+PRD v1.1 + new DECISIONS entries D-2026-04-26-07 onward for the load-bearing
+changes. Re-run threat-model + output-quality against v1.1 before commit.
+
+After v1.1 commits, path #2 (Karpathy review) is queued by Mo. Three-layer
 artifact discipline: process/karpathy-input.md preserves source, DECISIONS.md
-gains entries D-2026-04-26-07 onward, fold into PRD as v1.1 or queue for v2.
-Single-target lens per feedback_review_as_lens_not_comparator.md; do NOT
+gains entries from D-2026-04-26-N+1 onward, fold into PRD as v1.2 or queue for
+v2. Single-target lens per feedback_review_as_lens_not_comparator.md; do NOT
 compare Cuttle to nanoGPT or Karpathy's tooling.
 
 Anti-goals: don't re-derive the 12 session-1 decisions or the 6 session-3
@@ -266,5 +303,7 @@ don't re-prune memory (done in session 2); don't re-derive post-rectification
 framing (cite framework_development_methodology.md lines 22-27); don't inline
 cuttle_v01_option_c_enumeration.md back into framework_components.md
 (deliberately separated); don't re-research Carlos Arguelles articles
-(captured in process/carlos-arguelles-input.md).
+(captured in process/carlos-arguelles-input.md); don't re-run threat-model or
+output-quality against unchanged PRD v1 (artifacts at docs/threat-model-prd-v1.md
+and docs/output-quality-prd-v1.md, committed 2860f18).
 ```
