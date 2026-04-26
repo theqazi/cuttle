@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn novel_category_blocked() {
-        // Codepoint in Linear B Syllabary (U+10000..U+1007F) — definitely
+        // Codepoint in Linear B Syllabary (U+10000..U+1007F); definitely
         // not on the allowlist.
         let attack = "skill\u{10000}content";
         let r = scan_for_disallowed(attack);
@@ -194,8 +194,13 @@ mod tests {
 
     #[test]
     fn em_dash_passes() {
-        // Em-dash U+2014 is in General Punctuation; should pass.
-        let r = scan_for_disallowed("This — is fine.");
+        // Em-dash U+2014 is in General Punctuation; should pass. The U+2014
+        // character below is the test subject, not LLM-typical prose; the
+        // CLAUDE.md rule 7d.1 em-dash discipline applies to prose, not to
+        // test data that exercises Unicode-handling code paths.
+        let test_subject = '\u{2014}';
+        let input = format!("This {} is fine.", test_subject);
+        let r = scan_for_disallowed(&input);
         assert!(r.is_ok());
     }
 
