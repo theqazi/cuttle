@@ -1,0 +1,13 @@
+[package]
+name = "cuttle-input"
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle TTY input handler. Mints TtyInputCap once per session. Per docs/TDD.md §2.5 + §3."
+
+[dependencies]
+cuttle-gate = { path = "../cuttle-gate" }
+thiserror.workspace = true

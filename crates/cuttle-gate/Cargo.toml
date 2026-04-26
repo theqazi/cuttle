@@ -1,0 +1,17 @@
+[package]
+name = "cuttle-gate"
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle policy gate: AttestationBody + capability-token witness pattern. Per docs/TDD.md §2.4 + §2.5 + §3."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

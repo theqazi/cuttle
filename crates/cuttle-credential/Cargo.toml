@@ -1,0 +1,20 @@
+[package]
+name = "cuttle-credential"
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle credential vault: ApiKey + HelperHash domain primitives. Per docs/TDD.md §2.4."
+
+[dependencies]
+serde.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+zeroize.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
