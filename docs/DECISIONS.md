@@ -671,3 +671,93 @@ C. Custom deserializer with explicit version tag. Most defensive but heaviest en
 **Decision**: per-predicate threshold refinements documented in TDD §3.9: F-Cuttle-DISABLE expanded to count `keychain_always_allow` as (d)-class evidence; F-Cuttle-BEDROCK ships data-collection mechanism in v0.1, statistical test runs operator-side post-week; F-Cuttle-SUBSTRATE abandon-point definition specified (60s no-result, no follow-up audit entry); F-Cuttle-OPTION-C per-rule normalization formula given; F-Cuttle-SNAPSHOT-DRIFT operator-review rubric specified; F-Cuttle-MEMORY-DRIFT normalized against operator's own commit-creation rate; **F-Cuttle-FATIGUE: trigram tokenizer over last 5 conversation turns; per-attestation logging stored in `~/.cuttle/audit/fatigue/<session-id>.jsonl` with mode 0600 owner-only no-group ACL; fatigue-detection runs locally at end-of-session (no model call)**.
 
 **Consequences**: thresholds operationally measurable; fatigue-detection logging surface is a new sub-surface that OQ-12 (audit-log PII posture) must address comprehensively (the model context window snapshot may contain PII). The fatigue-log gets the strictest ACL of any v0.1 surface.
+
+---
+
+## D-2026-04-26-26: macOS sandbox primitive for v0.1 (resolves OQ-3); tiered T-005 deprecation contingency
+
+| Field   | Value                                                                                     |
+| ------- | ----------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                |
+| Status  | Accepted                                                                                  |
+| Source  | PRD v3 §6.1.1 (sandbox primitive) + §10 OQ-3 + T-005 (deprecation risk); `docs/TDD.md` §4 |
+| Affects | `cuttle-sandbox` crate; v0.1 macOS-only constraint                                        |
+
+**Decision**: v0.1 ships the macOS App Sandbox via the standard sandbox-binary invocation, with the Sandbox profile language generated programmatically per project working directory. Hybrid `posix_spawn`-based seatbelt rejected for v0.1 (additional engineering surface). T-005 contingency tiers documented: Endpoint Security framework, then Hypervisor framework + microVM, then Apple Virtualization framework + lightweight Linux guest. Triggers when (a) Apple announces removal in beta OR (b) the binary returns ENOSYS/EPERM on a stable release.
+
+**Consequences**: per-project SBPL generation; explicit allowed-binary enumeration; deny-network-by-default with localhost exception (for v0.2 MCP-server-on-localhost); rlimits via tokio `pre_exec` hook. Anthropic API client runs OUTSIDE the sandbox (only sandboxed programs are bash invocations). v0.1 macOS-only confirmed; Linux v0.2 needs separate sandbox primitive.
+
+---
+
+## D-2026-04-26-27: HMAC chain for v0.1 audit log (resolves OQ-4); sync_data per entry; key management deferred
+
+| Field   | Value                                                                               |
+| ------- | ----------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                          |
+| Status  | Accepted                                                                            |
+| Source  | PRD v3 §6.1.1 + §10 OQ-4 + T-003 (anti-Sybil disclaimer); `docs/TDD.md` §5.1        |
+| Affects | `cuttle-audit::chain`; latency budget for tool dispatch; v0.2 Merkle promotion path |
+
+**Decision**: v0.1 ships HMAC chain (per-entry HMAC over seq || timestamp || event || prev_hmac using session-derived key). `sync_data()` per entry; latency cost accepted. Merkle tree with periodic root publication deferred to v0.2 (PRD §6.1.1 already disclaims chain is anti-forgetfulness/anti-drift NOT anti-Sybil per T-003). Key management TDD-grade subsection deferred (per-day rotating key sketch in TDD §5.1; full key derivation hierarchy is FIX-DOCS scope).
+
+**Consequences**: simpler v0.1 implementation; honest scope. v0.2 Merkle promotion needs key-publication mechanism (operator-controlled side-channel). Audit log latency dominated by `sync_data()` (~1-5ms on SSD); acceptable for tool dispatch.
+
+---
+
+## D-2026-04-26-28: Tool-registration `secret_bearing` flag with safe-by-default (closes WV-03)
+
+| Field   | Value                                                                                                   |
+| ------- | ------------------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                              |
+| Status  | Accepted                                                                                                |
+| Source  | `docs/adversarial-review-prd-v1.2.md` WV-03; PRD v3 §6.1.1 audit-log bullet; `docs/TDD.md` §5.2         |
+| Affects | `cuttle-audit::tagging::ToolRegistry`; tool-registration manifest format; v0.1 tool-onboarding contract |
+
+**Decision**: each tool registered with `ToolTag { secret_bearing: bool, pii_bearing: PiiPosture, ... }`. Unknown tools default to `secret_bearing: true, pii_bearing: RedactAtWrite` (safe-by-default per WV-03). For tagged secret-bearing tools, audit log records ONLY metadata (length, type, success/failure), NOT a content sha256. Per-tool tagging happens at tool registration (compile time for v0.1 built-in tools; runtime for v0.2+ MCP / dynamic tools).
+
+**Consequences**: WV-03 closed; audit-log content-digest fingerprint side-channel eliminated for tagged tools and unknown tools. Operator must explicitly mark a tool as `secret_bearing: false` for full content sha256 logging (audit-trail completeness vs side-channel-resistance trade is operator-explicit per tool).
+
+---
+
+## D-2026-04-26-29: State-coherence self-HMAC + audit-chain-head two-fence design (closes BP-04 at TDD-grain)
+
+| Field   | Value                                                                                     |
+| ------- | ----------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                |
+| Status  | Accepted                                                                                  |
+| Source  | `docs/adversarial-review-prd-v1.2.md` BP-04; PRD v3 §8 case 9; `docs/TDD.md` §5.3         |
+| Affects | `~/.cuttle/state-coherence.json` schema; startup invariant; `--restored-from-backup` flow |
+
+**Decision**: `state-coherence.json` carries (last_clean_shutdown, audit_chain_head, registry_chain_head, keychain_prompt_count_7day, state_coherence_self_hmac). The self-HMAC uses a key derived from operator-machine binding (HMAC-SHA256(machine-uuid || cuttle-install-id)). Two-fence design: backup-restore from another machine fails self-HMAC; backup-restore from same machine passes self-HMAC but `audit_chain_head` mismatch against actual audit log triggers `--restored-from-backup` requirement.
+
+**Consequences**: BP-04 closed at TDD-grain. Operator-machine binding is the load-bearing primitive; v0.2 multi-machine support needs to revisit. The state-coherence file itself is a v0.1 trust-boundary surface; future TDD-grade tests verify both fences fire.
+
+---
+
+## D-2026-04-26-30: Audit-log PII posture = RedactAtWrite default + per-tool RecordAsIs opt-in (resolves OQ-12)
+
+| Field   | Value                                                                              |
+| ------- | ---------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                         |
+| Status  | Accepted                                                                           |
+| Source  | `docs/adversarial-review-prd-v1.2.md` BP-06 + PRD v3 §10 OQ-12; `docs/TDD.md` §5.4 |
+| Affects | `cuttle-audit::Redactor`; per-tool tagging; privacy-skill review at REVIEW-2       |
+
+**Decision**: hybrid posture. `RedactAtWrite` is the safe default for all tools; `RecordAsIs` requires explicit per-tool operator opt-in (logged). `Refused` reserved for v0.2+ for tools that turn out to be unredactable. `Redactor` trait per tool category; default redactor masks emails, SSN-shaped digits, IP-address tokens, and operator-configurable regexes from `~/.cuttle/config.toml` `[audit.redact]`. Redacted content digest computed on redacted text, NOT original.
+
+**Consequences**: OQ-12 resolved at TDD-grain. Privacy-skill review at REVIEW-2 audits redactor coverage. F-Cuttle-FATIGUE per-attestation logging (per D-25) inherits the RedactAtWrite default applied to model context window snapshots; fatigue-log additional ACL hardening (mode 0600 owner-only-no-group) layers on top.
+
+---
+
+## D-2026-04-26-31: Memory filesystem layout (canonical/ + quarantine/{pending,rejected}/) with TtyInputCap-gated promotion
+
+| Field   | Value                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------- |
+| Date    | 2026-04-26                                                                                  |
+| Status  | Accepted                                                                                    |
+| Source  | PRD v3 §6.1.5 cross-session memory promotion invariant + T-007; `docs/TDD.md` §6            |
+| Affects | `cuttle-memory` crate; `~/.cuttle/memory/` layout; F-Cuttle-MEMORY-DRIFT measurement source |
+
+**Decision**: filesystem split: `canonical/` (operator-promoted, loaded as `OperatorAuthoredText`), `quarantine/pending/` (model-authored, surfaced to model with `<untrusted-pending-promotion>` tags), `quarantine/rejected/` (kept N=30 days for re-review). Promotion via `prompt_promotion()` requires `&TtyInputCap` (per D-17 capability-token witness pattern). Per-project + global scope: global at `~/.cuttle/memory/`, per-project at `~/.cuttle/memory/projects/<project-key>/` (per-project overrides global at load order). Audit log records every quarantine write, promotion, rejection.
+
+**Consequences**: T-007 closed at TDD-grain via filesystem-level + type-system-level enforcement. F-Cuttle-MEMORY-DRIFT measurement is mechanical (audit-log scan over quarantine-write vs promote vs reject events). v0.2 may add per-quarantine-entry classifier (e.g., model-confidence score) to surface "high-confidence pending" first.

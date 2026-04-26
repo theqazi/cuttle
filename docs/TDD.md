@@ -727,6 +727,356 @@ PRD v3 §6.1.1 acknowledges the cross-purpose between CC-1 fail-closed gate and 
 
 ---
 
-## §4 through §6: PENDING
+## §4. Sandbox primitive (resolves OQ-3; specifies T-005 contingency)
 
-To be written in subsequent commits.
+### 4.1 v0.1 primitive: `sandbox-exec` via Rust FFI
+
+**Decision: `sandbox-exec(1)` invoked via Rust process spawning, with the App Sandbox profile language generated programmatically per project working directory.** Hybrid via `posix_spawn` rejected for v0.1 (additional engineering surface; sandbox-exec alone covers the v0.1 attack surface).
+
+```rust
+// crates/cuttle-sandbox/src/lib.rs
+
+pub struct SandboxProfile {
+    project_root: PathBuf,
+    allowed_subprocess_paths: Vec<PathBuf>,  // /bin, /usr/bin, etc.; explicitly enumerated
+    cpu_limit_secs: u32,
+    mem_limit_mb: u32,
+    max_open_fds: u32,
+    max_subprocesses: u32,
+}
+
+impl SandboxProfile {
+    pub fn for_project(project_root: PathBuf) -> Self {
+        Self {
+            project_root,
+            allowed_subprocess_paths: default_allowed_binaries(),
+            cpu_limit_secs: 60,        // operator-configurable in config.toml
+            mem_limit_mb: 1024,
+            max_open_fds: 256,
+            max_subprocesses: 16,
+        }
+    }
+
+    /// Renders the App Sandbox profile language (Apple's TinyScheme variant).
+    pub fn render_sbpl(&self) -> String {
+        format!(r#"
+(version 1)
+(deny default)
+(allow process-fork)
+(allow file-read*
+  (subpath "{project}")
+  (subpath "/usr/lib")
+  (subpath "/System/Library"))
+(allow file-write*
+  (subpath "{project}"))
+(allow process-exec
+  {allowed_paths})
+(deny network*)
+(allow network* (remote ip "127.0.0.1:*"))
+"#,
+            project = self.project_root.display(),
+            allowed_paths = self.allowed_subprocess_paths
+                .iter()
+                .map(|p| format!("(literal \"{}\")", p.display()))
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+    }
+
+    /// Spawn `sandbox-exec -p <profile> <command>` and apply rlimits in
+    /// the spawned program via tokio::process::Command::pre_exec.
+    pub async fn spawn(&self, command: &str, args: &[&str]) -> Result<TokioChild, SandboxError> {
+        let profile = self.render_sbpl();
+        // ... write profile to temp file (tmpfs mount; auto-cleanup on Drop),
+        // ... build Command with sandbox-exec wrapping,
+        // ... apply rlimits via pre_exec hook,
+        // ... spawn.
+    }
+}
+```
+
+**Why generate-the-profile-per-call rather than ship-static-profiles**: project root differs per session; the profile string must be regenerated. Caching by project-root hash is a v0.2 optimization.
+
+**Network policy**: `(deny network*)` plus `(allow network* (remote ip "127.0.0.1:*"))` permits MCP-server-on-localhost (deferred to v0.2 anyway) and blocks all other network. Anthropic API client runs **outside** the sandbox (only sandboxed subprocesses are bash invocations), so the API connection is not affected.
+
+### 4.2 Deprecation contingency (T-005)
+
+Apple has deprecated the App Sandbox profile language documentation, but `sandbox-exec(1)` remains shipped and functional in macOS 14 / 15 / 16 (verified 2026-04). Cuttle's contingency plan for the day Apple withdraws `sandbox-exec`:
+
+| Order | Candidate                                                    | Engineering cost | Coverage equivalence                                                                           |
+| ----- | ------------------------------------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------- |
+| 1st   | **Endpoint Security framework**                              | Medium-high      | Better; per-syscall hooks; requires entitlement + system-extension installation.               |
+| 2nd   | **Hypervisor framework + microVM**                           | High             | Strongest isolation; significant per-call latency. Use only if Endpoint Security is also gone. |
+| 3rd   | **Apple Virtualization framework + lightweight Linux guest** | Highest          | Strongest; loses macOS-native filesystem semantics; operator confusion.                        |
+
+The contingency triggers when (a) Apple announces removal in a beta release, OR (b) `sandbox-exec` returns ENOSYS / EPERM on a stable macOS release. v0.1 ships sandbox-exec; the contingency stays as a TDD-grade plan, not a v0.1 commitment.
+
+### 4.3 Failure modes
+
+- `sandbox-exec` not found: Cuttle fails closed at startup with structured error; operator instructed to verify macOS install.
+- Profile compilation error: Cuttle fails closed; logs the rendered SBPL to `~/.cuttle/run/sandbox-debug.sbpl` (operator-readable, no secrets); operator inspects.
+- Sandboxed program exceeds rlimit: program killed; audit log records the resource exhaustion; gate returns `Decision::Deny { reason: "resource limit exceeded", ... }` for the parent tool call.
+
+### DECISIONS entry from §4
+
+- **D-2026-04-26-26**: `sandbox-exec` via Rust FFI for v0.1 (resolves OQ-3); per-project SBPL generation; explicit allowed-subprocess-paths enumeration; tiered T-005 deprecation contingency (Endpoint Security → Hypervisor → Apple Virtualization).
+
+---
+
+## §5. Audit log + tamper-evident chain (resolves OQ-4 + OQ-12; specifies WV-03, BP-02 evaluator scope)
+
+### 5.1 Tamper-evident chain scheme: HMAC chain (resolves OQ-4)
+
+**Decision: HMAC chain for v0.1; Merkle tree with periodic root publication deferred to v0.2.** PRD v3 §6.1.1 already disclaims the chain is anti-forgetfulness/anti-drift, NOT anti-Sybil against operator-as-adversary (per T-003); the simpler scheme is honest given that scope.
+
+```rust
+// crates/cuttle-audit/src/chain.rs
+use sha2::{Sha256, Digest};
+use hmac::{Hmac, Mac};
+
+type HmacSha256 = Hmac<Sha256>;
+
+#[derive(Serialize, Deserialize)]
+pub struct AuditEntry {
+    pub seq: u64,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub event: AuditEvent,
+    pub prev_hmac: [u8; 32],   // HMAC of the previous entry; 0u8;32 for genesis
+    pub hmac: [u8; 32],         // HMAC over (seq || timestamp || event || prev_hmac) using session key
+}
+
+pub struct AuditChain {
+    session_key: SecretKey,    // per-session; derived from per-day rotating key (TDD-grade key-management subsection deferred)
+    last_seq: u64,
+    last_hmac: [u8; 32],
+    writer: tokio::fs::File,   // append-only; ~/.cuttle/audit/<yyyy-mm-dd>.jsonl
+}
+
+impl AuditChain {
+    pub async fn append(&mut self, event: AuditEvent) -> Result<(), AuditError> {
+        let next_seq = self.last_seq + 1;
+        let timestamp = chrono::Utc::now();
+        let mut mac = HmacSha256::new_from_slice(&self.session_key.0)?;
+        mac.update(&next_seq.to_le_bytes());
+        mac.update(&timestamp.timestamp_nanos_opt().unwrap_or(0).to_le_bytes());
+        mac.update(&serde_json::to_vec(&event)?);
+        mac.update(&self.last_hmac);
+        let hmac: [u8; 32] = mac.finalize().into_bytes().into();
+        let entry = AuditEntry { seq: next_seq, timestamp, event, prev_hmac: self.last_hmac, hmac };
+        let line = serde_json::to_string(&entry)? + "\n";
+        self.writer.write_all(line.as_bytes()).await?;
+        self.writer.sync_data().await?;  // flush to disk per entry; latency cost accepted
+        self.last_seq = next_seq;
+        self.last_hmac = hmac;
+        // Update chain-head digest file for state-coherence (per PRD §8 case 9)
+        self.update_chain_head().await?;
+        Ok(())
+    }
+}
+```
+
+**Sync-per-entry**: yes, despite latency cost. Audit log is the evidence chain; un-flushed entries violate the "audit catches drift" claim if Cuttle crashes between `write` and `sync`.
+
+### 5.2 Tool-registration tagging contract for `secret_bearing` flag (WV-03 closure)
+
+```rust
+// crates/cuttle-audit/src/tagging.rs
+#[derive(Serialize, Deserialize)]
+pub struct ToolTag {
+    pub tool_name: String,
+    pub secret_bearing: bool,
+    pub pii_bearing: PiiPosture,        // §5.4
+    pub registered_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum PiiPosture {
+    Refused,                            // tool refused at registration (§5.4 option C)
+    RedactAtWrite,                      // §5.4 option B
+    RecordAsIs,                         // §5.4 option A; requires explicit operator opt-in per tool
+}
+
+/// Tool registry; populated at session start. Unknown tools default to:
+/// secret_bearing = true, pii_bearing = RedactAtWrite. Safe-by-default per WV-03.
+pub struct ToolRegistry {
+    tools: HashMap<String, ToolTag>,
+}
+
+impl ToolRegistry {
+    pub fn lookup_or_safe_default(&self, tool_name: &str) -> ToolTag {
+        self.tools.get(tool_name).cloned().unwrap_or(ToolTag {
+            tool_name: tool_name.to_string(),
+            secret_bearing: true,
+            pii_bearing: PiiPosture::RedactAtWrite,
+            registered_at: chrono::Utc::now(),
+        })
+    }
+}
+```
+
+**Audit-log writer behavior** for tool-result events:
+
+```rust
+match registry.lookup_or_safe_default(&tool_call.tool_name) {
+    ToolTag { secret_bearing: false, pii_bearing: _, .. } => {
+        // Safe to record full content digest
+        AuditEvent::ToolResult {
+            tool_name: tool_call.tool_name,
+            length: result.len(),
+            content_sha256: Some(sha256(result.as_bytes())),
+            success: true,
+        }
+    }
+    ToolTag { secret_bearing: true, .. } => {
+        // Per WV-03: metadata only, no content digest.
+        AuditEvent::ToolResult {
+            tool_name: tool_call.tool_name,
+            length: result.len(),
+            content_sha256: None,
+            success: true,
+        }
+    }
+}
+```
+
+### 5.3 State-coherence file integrity (recursive, per BP-04)
+
+`~/.cuttle/state-coherence.json` itself is a target for the same backup/restore failure mode. v0.1 mechanism:
+
+```rust
+#[derive(Serialize, Deserialize)]
+pub struct StateCoherence {
+    pub last_clean_shutdown: chrono::DateTime<chrono::Utc>,
+    pub audit_chain_head: [u8; 32],         // current HMAC head per §5.1
+    pub registry_chain_head: Option<[u8; 32]>,  // L5 reward-loop chain head per PRD v3 §6.1.2 row L5
+    pub keychain_prompt_count_7day: u32,    // per BP-05 / D-24 budget
+    pub state_coherence_self_hmac: [u8; 32], // HMAC of THIS file using a key derived from operator-machine binding (e.g., HMAC-SHA256(machine-uuid || cuttle-install-id))
+}
+```
+
+The `state_coherence_self_hmac` covers the file's own contents using a key the operator owns. A backup-restore that includes `state-coherence.json` from another machine fails the self-HMAC check, triggering the `--restored-from-backup` requirement. A backup-restore from the same machine passes the self-HMAC check, but the `audit_chain_head` mismatch against the actual audit log triggers the requirement anyway. Two-fence design: even if one fence is bypassed, the other fires.
+
+### 5.4 Audit-log PII posture (resolves OQ-12)
+
+PRD v3 §10 OQ-12 listed three options: record-as-is, redact-at-write, refuse-tools-that-may-emit-PII.
+
+**Decision: hybrid; RedactAtWrite is the safe default; tools opt-in to RecordAsIs (operator approval per tool); Refused is reserved for v0.2+ if a tool turns out to be unredactable.**
+
+Redaction at write happens at the audit-log writer boundary using a `Redactor` trait per tool category. Default redactor masks email-shaped strings, SSN-shaped digits, IP-address-shaped tokens, and operator-configurable regexes from `~/.cuttle/config.toml` `[audit.redact]`. Redacted content digest is computed on the redacted text, NOT the original.
+
+```rust
+trait Redactor: Send + Sync {
+    fn redact(&self, content: &str) -> String;
+}
+
+struct DefaultRedactor;
+
+impl Redactor for DefaultRedactor {
+    fn redact(&self, content: &str) -> String {
+        let email_re = regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap();
+        let mut redacted = email_re.replace_all(content, "<email-redacted>").to_string();
+        // ... additional PII regexes ...
+        redacted
+    }
+}
+```
+
+**Privacy-skill review** (per PRD v3 §11 step 3, D-09 / CC-3) audits the redactor coverage; recommendations land in REVIEW-2 findings registry.
+
+### 5.5 Aggregation contract for telemetry (per D-04, D-09)
+
+`cuttle telemetry` per PRD v3 §6.1.6 + D-2026-04-26-04 consumes the audit log; aggregation is on-demand (no separate aggregate file maintained out-of-band). Implementation:
+
+- The audit log JSONL is the source of truth.
+- `~/.cuttle/telemetry/aggregates.json` is an OPTIONAL cache populated by `cuttle telemetry --rebuild`; queries default to scanning JSONL on demand.
+- Aggregations: gate-fire rates per (tool_name, decision), override attempts per tool, abandon-point counts (per F-Cuttle-SUBSTRATE definition in TDD §3.9), F-Cuttle-DISABLE event counts (per D-25 expanded scope).
+- Latency target for `cuttle telemetry`: ≤2 seconds for a dogfood-week of audit events (~5MB JSONL). Larger ranges trigger a warning to use `--rebuild`.
+
+### 5.6 Fitness-function automated evaluator scope (BP-02 partial close)
+
+PRD v3 §12 + D-13 acknowledges the "fitness function" framing is aspirational at v0.1 ship: predicates ship as data; automated evaluator is TDD-grade scope. v0.1 scope:
+
+- `cuttle-falsifiers` crate (per D-19) implements the **data-collection** side: each falsifier predicate has a corresponding audit-event variant that the writer emits (e.g., `AuditEvent::GateDisabled { rule_id, operator_reason }`).
+- `cuttle telemetry --falsifier-eval` runs the per-predicate evaluation on demand using the data; outputs to stdout in human-readable form + machine-readable JSON.
+- Automated periodic evaluation is v0.2 scope (would require `cron`-like or systemd-timer-like surface; out of v0.1 §6.1 scope).
+
+### DECISIONS entries from §5
+
+- **D-2026-04-26-27**: HMAC chain for v0.1 audit log (resolves OQ-4); `sync_data()` per entry; key management TDD-grade subsection deferred.
+- **D-2026-04-26-28**: tool-registration `secret_bearing` flag with safe-by-default for unknown tools (closes WV-03).
+- **D-2026-04-26-29**: state-coherence self-HMAC + audit-chain-head two-fence design for backup/restore integrity (closes BP-04 at TDD-grain).
+- **D-2026-04-26-30**: audit-log PII posture = RedactAtWrite default + per-tool RecordAsIs opt-in (resolves OQ-12); privacy-skill review at REVIEW-2.
+
+---
+
+## §6. Memory + quarantine layout (specifies §6.1.5 cross-session memory invariant)
+
+### 6.1 Filesystem layout
+
+```text
+~/.cuttle/memory/
+├── canonical/                       # operator-promoted; loaded as trusted
+│   ├── MEMORY.md                    # operator-authored index
+│   └── <topic>.md                   # operator-promoted sidecars
+└── quarantine/                      # model-authored; loaded with untrusted-by-default framing
+    ├── pending/                     # awaiting operator review
+    │   └── <session>-<seq>.md
+    └── rejected/                    # operator rejected (kept N=30 days for re-review)
+        └── <session>-<seq>.md
+```
+
+Mode: `canonical/` 0700 (operator owns); `quarantine/` 0700; both on the operator-only ACL inherited from `~/.cuttle/`.
+
+### 6.2 Promotion workflow
+
+```rust
+// crates/cuttle-memory/src/promotion.rs
+pub enum PromotionDecision {
+    Promote { canonical_path: PathBuf },
+    Reject { reason: String },
+    Defer,  // operator chose to leave in quarantine for now
+}
+
+pub async fn prompt_promotion(
+    quarantine_entry: &Path,
+    cap: &TtyInputCap,    // capability-token witness per D-17
+) -> Result<PromotionDecision, MemoryError> {
+    // 1. Display quarantine entry contents to TTY.
+    // 2. Display proposed canonical path.
+    // 3. Prompt operator (via the input-handler crate which holds TtyInputCap).
+    // 4. Operator response is OperatorAuthoredText (per §2.4).
+    // 5. Audit-log the decision with full provenance.
+}
+```
+
+**Cross-session loading** (per PRD v3 §6.1.5):
+
+- At session start, `cuttle-memory` loads `canonical/MEMORY.md` and its sidecars as `OperatorAuthoredText` (trusted).
+- It ALSO scans `quarantine/pending/` and surfaces each entry to the model with `<untrusted-pending-promotion>` tags in the system prompt.
+- The model can REFERENCE quarantine entries but cannot promote them; promotion requires `prompt_promotion()` which requires `&TtyInputCap`.
+
+### 6.3 Per-session vs per-project scope
+
+v0.1 scope: **per-project** memory at `~/.cuttle/memory/projects/<project-key>/` mirrors the layout above; **global** memory at `~/.cuttle/memory/` (no `projects/` prefix). Loading order: global first, then per-project (per-project overrides).
+
+### 6.4 Quarantine retention
+
+- `quarantine/pending/`: kept indefinitely until promoted or rejected.
+- `quarantine/rejected/`: kept N=30 days then auto-purged. Operator can reset via `cuttle memory --rescan-rejected` to recover within the window.
+- Audit log records every quarantine write, every promotion, every rejection (per F-Cuttle-MEMORY-DRIFT measurement source per `docs/falsifiers.md`).
+
+### DECISIONS entry from §6
+
+- **D-2026-04-26-31**: memory filesystem layout (canonical/ + quarantine/{pending,rejected}/); promotion requires TtyInputCap; cross-session loading distinguishes provenance via type-system primitives (per D-17). Quarantine retention 30-day rejected-window.
+
+---
+
+## TDD complete (v0)
+
+§1 through §6 cover OQ-1 (language), OQ-2 (DSL vs imperative), OQ-3 (sandbox primitive), OQ-4 (audit-log scheme), OQ-6 (filesystem), OQ-9 (Allow/Warn/Deny graduation), OQ-11 (process isolation forward-compat), OQ-12 (PII posture). OQ-5 (skill-trust model) is threat-model-skill scope per PRD v3 §10. OQ-7 (public name) is Phase 2 prep. OQ-8 (telemetry posture) is privacy-skill scope. OQ-10 (integration-vs-ablation) is Phase-1-equivalent-validation scope.
+
+Closes 8 of 12 OQs at TDD-grain; the remaining 4 (OQ-5, 7, 8, 10) are correctly not-TDD-scope per PRD v3 §10.
+
+Pipeline next: REVIEW-1 (`code-review` skill on PRD v3 + TDD v0) → REVIEW-2 (`legal-review` + `threat-model` + `privacy`) → FIX-DOCS → DESIGN (`system-design` skill) → API (`api-design` skill) → Implementation begins.
+
+DECISIONS added in this TDD: D-15 (Rust), D-16 (filesystem), D-17 (domain primitives + capability tokens), D-18 (serialization round-trip), D-19 (workspace), D-20 (in-process gate v0.1), D-21 (Allow/Warn/Deny graduation), D-22 (imperative plug-ins), D-23 (lockfile HMAC), D-24 (Keychain rate-budget), D-25 (falsifier thresholds + fatigue logging), D-26 (sandbox-exec), D-27 (HMAC audit chain), D-28 (tool tagging), D-29 (state-coherence self-HMAC), D-30 (PII posture), D-31 (memory layout). Total: 17 TDD-grade decisions on top of 14 PRD-grade decisions = 31 decisions in DECISIONS.md at TDD complete.
