@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.10 (after session 4 cuttle-runtime + cuttle-audit + cuttle-memory landed; 6 of 12 crates; 50/50 tests, 2026-04-26)
+**Version**: handoff-0.11 (session 5 closes path #1: ALL 12 of 12 v0.1 crates landed; 173/173 tests; cuttle binary builds + runs end-to-end; 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -20,7 +20,103 @@ instead of _behind_ it, because the substrate is no longer the bottleneck. v0.1 
 single-operator, CLI-only, Anthropic-API-key-only (ToS-clean), and ships as an
 implementation existence proof, not an effect claim.
 
-## State at end of session 4 (2026-04-26)
+## State at end of session 5 (2026-04-26)
+
+**Headline**: path #1 of handoff-0.10 closed. All 12 v0.1 crates committed; the
+`cuttle` binary builds, runs, and executes the first end-to-end CLI surface
+(`cuttle telemetry [--json] [--falsifier-eval]`) over a real audit log.
+Workspace: 173/173 tests pass; `cargo clippy --all-targets -- -D warnings` clean.
+
+**Crates added in session 5** (commits on `main` after `1bfd7f0`):
+
+- `cuttle-skills` v0.0.5, `cuttle-rewardloop` v0.0.6 (landed before session-5 capture
+  but in the same milestone): unicode-allowlist scan + AP/VP signed-provenance registry.
+- `cuttle-falsifiers` v0.0.7 (`6cd12d6`): three data-collection evaluators
+  (DISABLE / SNAPSHOT-DRIFT / MEMORY-DRIFT) per BP-02 / D-25 + sealed-falsifiers doc.
+- `cuttle-anthropic` v0.0.8 (`1a42d58`): non-streaming `messages()` over reqwest+rustls;
+  AnthropicError taxonomy with explicit retryable classification; RetryPolicy as a
+  pure decision function. Streaming + prompt-cache are scoped for v0.0.9 / v0.0.10.
+- `cuttle-sandbox` v0.0.9 (`2343451`): SBPL profile generator + sync spawn over the
+  standard macOS sandbox binary. Live integration tests prove (a) end-to-end
+  sandboxed echo works and (b) the sandbox actually denies writes outside
+  `project_root` (adversarial test caught two TDD-grade bugs in initial run).
+  rlimit enforcement deferred to v0.0.10 (warrants its own threat-model pass).
+- `cuttle-telemetry` v0.0.10 (`8cf159d`): library backing the `cuttle telemetry`
+  CLI surface. Aggregate primitives (dispatch / decisions / overrides / abandons)
+  plus `TelemetryReport::with_falsifiers` composition over cuttle-falsifiers.
+- `cuttle-cli` v0.0.11 (`598dd39`): top-level binary. Hand-rolled argv parser
+  (~140 LOC); subcommand handlers in their own modules; centralized path
+  resolution; exit codes 0/1/2 for success/usage/subcommand. Smoke-tested:
+  `cuttle --version` → `cuttle 0.0.11`, missing-audit-log error is specific +
+  actionable + correct exit code.
+- `cuttle-audit` gained a small read-only addition: `read_entries_unverified()`
+  for read-only consumers (telemetry, future session-resume) that don't own the
+  chain key. The verifying path (`cuttle audit verify`) lands in v0.0.12+.
+
+**Process learnings from session 5**:
+
+1. **Adversarial / live-integration tests on policy code are mandatory, not optional.**
+   The cuttle-sandbox initial profile compiled fine and produced a syntactically
+   valid SBPL — but every sandboxed program died with SIGABRT because dyld
+   couldn't stat `/`. A pure renderer test would have shipped a useless sandbox.
+   The "test what you claim to enforce" rule (CLAUDE.md §8g) is non-negotiable
+   for security primitives. Two TDD-grade bugs caught: SBPL rejects IP literals
+   in `(remote ip ...)` (only `localhost` / `*` are accepted hosts on macOS 14+);
+   `(literal "/")` is required in `file-read*` for the loader to not abort.
+
+2. **Scope discipline holds even when "continue until interrupted" is the standing
+   directive.** Each crate landed at a clean unit-of-thinking boundary
+   (cuttle-anthropic v0.0.8 = non-streaming + retry only; streaming was
+   deliberately deferred to v0.0.9). The alternative (one giant cuttle-anthropic
+   commit covering streaming + prompt-cache + retry) would have made review
+   harder and forced larger rollback if any subsystem turned out wrong.
+
+3. **Pre-existing legacy state from end of session 4 (the 6-crates-landed era)
+   is preserved verbatim below for traceability**; the session-5 block above is
+   the authoritative current view. Do not re-derive state from the older block.
+
+## Where to resume (session 6 priorities)
+
+Path #1 of handoff-0.10 is now CLOSED (all v0.1 crates land). The next-up
+ranking, in order of how much each unblocks the daily-driver UX:
+
+1. **`cuttle-anthropic` v0.0.9 (streaming SSE)** — the largest unblocker for
+   the interactive-REPL surface. Adds `messages_stream()` over
+   `eventsource-stream`. Critical retry-safety contract: NEVER retry once
+   the first byte of a streamed response has landed (double-billing trap
+   documented in retry.rs module doc). Also adds HTTP-date Retry-After
+   parsing (delta-seconds form already lands in v0.0.8).
+
+2. **`cuttle-cli` v0.0.12 (interactive `cuttle session start`)** — depends on
+   #1. The first daily-driver-shape command. Composes credential vault →
+   AnthropicClient::messages_stream → sandbox-dispatch loop → audit chain.
+   This is the dogfood-readiness gate per PRD SC-1.
+
+3. **`cuttle-sandbox` v0.0.10 (rlimit enforcement)** — adds `pre_exec` hook
+   for RLIMIT_CPU / DATA / NOFILE / NPROC. Crosses an unsafe libc boundary;
+   trigger the `threat-model` skill on the unsafe surface BEFORE landing
+   (per CLAUDE.md mandatory-skill table).
+
+4. **`cuttle-cli` v0.0.13 (`cuttle audit verify` + `cuttle config init/show`)**
+   — composes `cuttle_audit::verify_chain`. Date-rolled audit log paths
+   (`~/.cuttle/audit/<yyyy-mm-dd>.jsonl`) per TDD §5; needs chrono wire-in.
+
+5. **REVIEW-1 / REVIEW-2 / FIX-DOCS pass** (parallel-stream) — once #1 + #2
+   are in place, run `code-review` skill on all 12 crates as a single batch,
+   then `threat-model` re-pass against the running binary, then a
+   `sbom-license` scan on the full reqwest+rustls dep tree before any v0.1
+   release tag. Per CLAUDE.md §5 (REVIEW step is mandatory at SYSTEM tier
+   before COMPLETE).
+
+6. **TDD §2-§6 doc completion** (lower priority; pending task #38) — the TDD
+   v0 covers §1 (language), §2 (config + primitives), §3 (gate), §4
+   (sandbox), §5 (audit), §6 (memory). Filling out §7 (skills), §8
+   (rewardloop), §9 (CLI surface) reflects the implementation that now
+   exists. Doc-after-code is acceptable here because the code commits
+   carry inline rationale; the TDD additions are for future-Mo / future
+   reviewer.
+
+## Legacy: state at end of session 4 (2026-04-26)
 
 - **Repository**: `/Users/m0qazi/cuttle`. 26 commits on `main`:
   - `16bc70e` seed (sessions 1-2)
