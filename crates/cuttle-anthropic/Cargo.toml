@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-anthropic"
-version = "0.0.9"
+version = "0.0.10"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle Anthropic API client. Thin wrapper over reqwest+serde per TDD §1; no third-party Anthropic SDK in v0.1 (supply-chain risk per PRD §9). v0.0.9 adds messages_stream() over eventsource-stream + StreamEvent enum + first-byte-aware retry safety. Prompt-cache deferred."
+description = "Cuttle Anthropic API client. Thin wrapper over reqwest+serde per TDD §1; no third-party Anthropic SDK in v0.1 (supply-chain risk per PRD §9). v0.0.10 adds prompt-cache support: SystemContent enum (Plain string OR typed Blocks with cache_control). v0.0.9 added streaming. v0.0.8 was non-streaming + retry."
 
 [dependencies]
 serde.workspace = true

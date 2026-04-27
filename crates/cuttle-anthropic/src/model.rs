@@ -99,6 +99,75 @@ impl Message {
     }
 }
 
+/// `system` field shape: either a plain string (no caching) or a list
+/// of typed blocks each with optional `cache_control`. The Anthropic
+/// API accepts either form on the wire, untagged. Callers wanting prompt
+/// caching MUST use `Blocks(...)` and tag the long-stable prefix with
+/// `CacheControl::ephemeral()`. v0.0.10 adds the `Blocks` variant; the
+/// `Plain` variant preserves the v0.0.8/v0.0.9 single-string ergonomic.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum SystemContent {
+    Plain(String),
+    Blocks(Vec<SystemBlock>),
+}
+
+impl From<String> for SystemContent {
+    fn from(s: String) -> Self {
+        SystemContent::Plain(s)
+    }
+}
+
+impl From<&str> for SystemContent {
+    fn from(s: &str) -> Self {
+        SystemContent::Plain(s.to_string())
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct SystemBlock {
+    /// Block kind. Anthropic v1 accepts only `"text"`; left as a free
+    /// String for forward-compat with future block kinds (image, etc.)
+    /// without a recompile.
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<CacheControl>,
+}
+
+impl SystemBlock {
+    pub fn text<S: Into<String>>(text: S) -> Self {
+        SystemBlock {
+            kind: "text".to_string(),
+            text: text.into(),
+            cache_control: None,
+        }
+    }
+
+    pub fn with_cache_control(mut self, cc: CacheControl) -> Self {
+        self.cache_control = Some(cc);
+        self
+    }
+}
+
+/// Prompt-cache control. Currently `ephemeral` is the only Anthropic-
+/// supported variant (5-minute TTL). Per Anthropic docs the cache breakpoint
+/// must be placed at a stable prefix boundary; the operator decides where.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CacheControl {
+    #[serde(rename = "type")]
+    pub kind: String,
+}
+
+impl CacheControl {
+    pub fn ephemeral() -> Self {
+        CacheControl {
+            kind: "ephemeral".to_string(),
+        }
+    }
+}
+
 /// `/v1/messages` request body. Required fields per Anthropic spec:
 /// `model`, `messages`, `max_tokens`. Optional fields are skipped when
 /// `None` to keep the wire payload identical to a hand-written curl.
@@ -111,7 +180,7 @@ pub struct Request {
     pub messages: Vec<Message>,
     pub max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<SystemContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -307,5 +376,91 @@ mod tests {
     fn stop_reason_unknown_deserializes_as_other() {
         let r: StopReason = serde_json::from_str("\"future_reason\"").unwrap();
         assert_eq!(r, StopReason::Other);
+    }
+
+    #[test]
+    fn system_content_plain_serializes_as_json_string() {
+        let sc = SystemContent::Plain("hello".to_string());
+        let s = serde_json::to_string(&sc).unwrap();
+        assert_eq!(s, "\"hello\"");
+    }
+
+    #[test]
+    fn system_content_blocks_serializes_as_json_array() {
+        let sc = SystemContent::Blocks(vec![SystemBlock::text("hello")]);
+        let s = serde_json::to_string(&sc).unwrap();
+        // Array form, with type=text and no cache_control field present.
+        assert!(s.starts_with('['), "expected array, got: {s}");
+        assert!(s.contains("\"type\":\"text\""));
+        assert!(s.contains("\"text\":\"hello\""));
+        assert!(!s.contains("cache_control"));
+    }
+
+    #[test]
+    fn system_block_with_ephemeral_cache_control_serializes() {
+        let block =
+            SystemBlock::text("long stable prefix").with_cache_control(CacheControl::ephemeral());
+        let s = serde_json::to_string(&block).unwrap();
+        assert!(s.contains("\"cache_control\":{\"type\":\"ephemeral\"}"));
+    }
+
+    #[test]
+    fn system_content_round_trips_as_blocks() {
+        let original = SystemContent::Blocks(vec![
+            SystemBlock::text("short header"),
+            SystemBlock::text("long doc").with_cache_control(CacheControl::ephemeral()),
+        ]);
+        let s = serde_json::to_string(&original).unwrap();
+        let restored: SystemContent = serde_json::from_str(&s).unwrap();
+        assert_eq!(original, restored);
+    }
+
+    #[test]
+    fn system_content_round_trips_as_plain() {
+        let original = SystemContent::Plain("just a string".to_string());
+        let s = serde_json::to_string(&original).unwrap();
+        let restored: SystemContent = serde_json::from_str(&s).unwrap();
+        assert_eq!(original, restored);
+    }
+
+    #[test]
+    fn system_content_from_str_yields_plain() {
+        let sc: SystemContent = "x".into();
+        assert_eq!(sc, SystemContent::Plain("x".to_string()));
+    }
+
+    #[test]
+    fn request_with_cached_system_blocks_serializes_correctly() {
+        let mut req = Request::new(
+            Model::Known(KnownModel::ClaudeHaiku45),
+            vec![Message::user_text("hi")],
+            64,
+        );
+        req.system = Some(SystemContent::Blocks(vec![SystemBlock::text(
+            "cached prefix",
+        )
+        .with_cache_control(CacheControl::ephemeral())]));
+        let s = serde_json::to_string(&req).unwrap();
+        assert!(s.contains("\"system\":["));
+        assert!(s.contains("\"cache_control\":{\"type\":\"ephemeral\"}"));
+    }
+
+    #[test]
+    fn request_with_plain_string_system_serializes_unchanged() {
+        // Backward-compat smoke: setting system to a plain string still
+        // produces the simple `"system": "text"` wire shape (no array,
+        // no per-block `cache_control`). Substring assertion targets the
+        // exact `"system":"..."` form to avoid coincidental matches in
+        // other fields (e.g. message Content blocks also use type=text).
+        let mut req = Request::new(
+            Model::Known(KnownModel::ClaudeHaiku45),
+            vec![Message::user_text("hi")],
+            64,
+        );
+        req.system = Some(SystemContent::Plain("be helpful".to_string()));
+        let s = serde_json::to_string(&req).unwrap();
+        assert!(s.contains("\"system\":\"be helpful\""));
+        assert!(!s.contains("\"system\":["));
+        assert!(!s.contains("cache_control"));
     }
 }
