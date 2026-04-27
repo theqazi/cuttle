@@ -130,6 +130,30 @@ impl AuditChain {
     }
 }
 
+/// Read all entries from an audit log file as JSONL, WITHOUT verifying
+/// the HMAC chain. Used by read-only consumers (`cuttle telemetry`,
+/// session-resume helpers) that want events but do not own the chain
+/// key. Use `verify_chain()` to confirm integrity separately, e.g. via
+/// `cuttle audit verify`.
+///
+/// Skips blank lines (matches the writer's `+ "\n"` newline convention).
+/// Surfaces the first malformed line as an `AuditError::Json`.
+pub fn read_entries_unverified(path: &std::path::Path) -> Result<Vec<AuditEntry>, AuditError> {
+    use std::io::BufRead;
+    let file = std::fs::File::open(path)?;
+    let reader = std::io::BufReader::new(file);
+    let mut entries = Vec::new();
+    for line in reader.lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry: AuditEntry = serde_json::from_str(&line)?;
+        entries.push(entry);
+    }
+    Ok(entries)
+}
+
 /// Verify an audit log file by re-walking the chain.
 /// Returns the final chain head if all entries verify; an error otherwise.
 pub fn verify_chain(path: &std::path::Path, key: &AuditChainKey) -> Result<[u8; 32], AuditError> {

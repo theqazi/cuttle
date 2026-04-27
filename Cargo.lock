@@ -155,6 +155,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuttle-cli"
+version = "0.0.11"
+dependencies = [
+ "cuttle-audit",
+ "cuttle-telemetry",
+ "dirs",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "cuttle-credential"
 version = "0.0.1"
 dependencies = [

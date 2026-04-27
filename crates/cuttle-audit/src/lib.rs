@@ -12,7 +12,9 @@ pub mod event;
 pub mod redact;
 pub mod tagging;
 
-pub use chain::{AuditChain, AuditChainKey, AuditEntry, AuditError};
+pub use chain::{
+    read_entries_unverified, verify_chain, AuditChain, AuditChainKey, AuditEntry, AuditError,
+};
 pub use event::AuditEvent;
 pub use redact::{DefaultRedactor, Redactor};
 pub use tagging::{PiiPosture, ToolRegistry, ToolTag};
