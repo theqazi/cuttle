@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle top-level CLI binary. v0.0.17 adds --system flag to cuttle ask (mirrors session start), enabling apples-to-apples bench comparison with the direct-Anthropic-SDK arm at ~/m0qazi/bench."
+description = "Cuttle top-level CLI binary. v0.0.17 adds --system flag to cuttle ask (mirrors session start), enabling apples-to-apples bench comparison with the direct-Anthropic-SDK arm in bench/."
 
 [[bin]]
 name = "cuttle"

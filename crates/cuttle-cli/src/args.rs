@@ -248,8 +248,8 @@ pub struct AskArgs {
     pub max_tokens: u32,
     pub api_key_env: String,
     /// Optional system prompt sent with the request. Mirrors session start's
-    /// --system. Used by the bench wrapper at ~/m0qazi/bench so the cuttle
-    /// arm and the direct-API arm send the same SYSTEM_PROMPT.
+    /// --system. Used by the bench wrapper in `bench/` so the cuttle arm and
+    /// the direct-API arm send the same SYSTEM_PROMPT.
     pub system: Option<String>,
     /// Either Some(prompt) (positional) OR Stdin (reader).
     pub source: PromptSource,
