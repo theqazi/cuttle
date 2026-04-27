@@ -32,10 +32,50 @@ die() { printf 'cuttle install: ERROR: %s\n' "$*" >&2; exit "${2:-1}"; }
 # Step 1: prerequisites.
 command -v "$CARGO" >/dev/null 2>&1 || die "cargo not found on PATH; install Rust 1.95+ via https://rustup.rs/" 1
 
-RUSTC_VERSION="$($CARGO --version | awk '{print $2}')"
 say "using $($CARGO --version)"
 
-# Step 2: build.
+# Step 2: pre-flight writability check. Fail fast with an actionable
+# message BEFORE spending 30s on a release build only to discover the
+# operator can't write to INSTALL_DIR. Two failure modes:
+# - INSTALL_DIR exists but isn't writable
+# - INSTALL_DIR doesn't exist and the parent isn't writable (mkdir fails)
+check_installable() {
+    if [ -d "$INSTALL_DIR" ]; then
+        # Existing dir: writable check via -w. -w returns true under
+        # sudo even for non-owner-writable dirs, so this also handles
+        # `sudo ./install.sh` cleanly.
+        [ -w "$INSTALL_DIR" ]
+    else
+        # Doesn't exist: try a probe mkdir (and clean up if it succeeds).
+        if mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+            # Created. Leave it; the install step would have created it
+            # anyway. Now confirm it's writable.
+            [ -w "$INSTALL_DIR" ]
+        else
+            return 1
+        fi
+    fi
+}
+
+if ! check_installable; then
+    cat >&2 <<EOF
+cuttle install: ERROR: cannot write to $INSTALL_DIR.
+
+Pick one:
+  sudo $0                                # install to $INSTALL_DIR
+  INSTALL_DIR=\$HOME/.local/bin $0       # user-local (no sudo)
+  INSTALL_DIR=\$HOME/bin $0              # user-local (no sudo)
+
+If you choose a user-local path, make sure it is on your PATH:
+  echo \$PATH | tr ':' '\\n' | grep -F "\$HOME/.local/bin" \\
+    || echo 'export PATH="\$HOME/.local/bin:\$PATH"' >> ~/.zshrc
+
+No build was started. Re-run with one of the options above.
+EOF
+    exit 3
+fi
+
+# Step 3: build.
 say "building release binary (this takes ~30s on a clean build)..."
 cd "$SCRIPT_DIR"
 if ! "$CARGO" build --release --bin cuttle; then
@@ -46,22 +86,15 @@ if [ ! -x "$RELEASE_BIN" ]; then
     die "expected release binary not found at $RELEASE_BIN" 2
 fi
 
-# Step 3: install.
+# Step 4: install.
 say "installing to $DEST"
 
-if [ ! -d "$INSTALL_DIR" ]; then
-    say "$INSTALL_DIR does not exist; creating it"
-    if ! mkdir -p "$INSTALL_DIR" 2>/dev/null; then
-        die "cannot create $INSTALL_DIR (permissions); pick a different INSTALL_DIR or run with sudo" 3
-    fi
-fi
-
 if ! cp "$RELEASE_BIN" "$DEST" 2>/dev/null; then
-    die "cannot copy to $DEST (permissions); pick a writable INSTALL_DIR (e.g. ~/.local/bin) or run with sudo" 3
+    die "cannot copy to $DEST (permissions changed since pre-flight); re-check $INSTALL_DIR" 3
 fi
 chmod 0755 "$DEST" || die "chmod failed on $DEST" 3
 
-# Step 4: report.
+# Step 5: report.
 say "installed: $DEST"
 "$DEST" --version
 
