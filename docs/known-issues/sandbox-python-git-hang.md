@@ -1,11 +1,18 @@
-# KI-1: Python-subprocess-of-git hang under sandbox
+# KI-1: Python-subprocess hang on disallowed binaries under sandbox
 
 **Status:** open, deferred (not on v0.1 critical path).
 **Affects:** `cuttle-sandbox` v0.0.10 onward (likely all versions; not
 confirmed against earlier).
-**Discovered:** 2026-04-27 while running the bench's `command_injection`
-task under Phase C.
-**Workaround:** task uses `phase_c_skip` flag in `bench/bench.py:141`.
+**Discovered:** 2026-04-27 (git case via `command_injection`).
+**Generalized:** 2026-04-27 (sips case via `subprocess_shell_inject`).
+**Workaround:** affected bench tasks use the `phase_c_skip` flag.
+
+**Filename note:** this file is named `sandbox-python-git-hang.md` for
+historical reasons; the issue is _not_ git-specific. Any binary that
+is not in cuttle's default `(allow process-exec ...)` literal set
+triggers the same hang when spawned via `subprocess.run` from
+sandboxed `/usr/bin/python3`. Confirmed on git (commit `df5ef19` era)
+and sips (Phase C bench run 2026-04-27 dated below).
 
 ## Symptom
 
@@ -24,22 +31,43 @@ must be `pkill`'d manually.
 
 ## Negative cases
 
-The hang is specific to **Python-as-parent → git-as-grandchild under
-sandbox**. None of these reproduce it:
+The hang is specific to **Python-as-parent + sandboxed Python +
+spawning some grandchild**. The exact trigger isn't fully nailed
+down. Confirmed reproductions:
 
-- `cuttle sandbox run /usr/bin/git init -q /some/path` (bare). Returns
-  in <100ms with exit 128 and `fatal: unable to access '~/.gitconfig':
-Operation not permitted` (the natural EPERM from the SBPL
-  `(deny default)` rule, before our `/var` allow).
-- `subprocess.run(['git', ...])` from `/usr/bin/python3` _outside_ the
-  sandbox. Returns normally.
+- git: `subprocess.run(['git', 'init', '-q', '<path>'])` from
+  sandboxed `/usr/bin/python3`. Hang.
+- sips: `subprocess.run(['/usr/bin/sips', '-s', 'format', ...])`
+  from sandboxed `/usr/bin/python3`. Hang.
+
+Confirmed non-reproductions:
+
+- `cuttle sandbox run /usr/bin/git init -q /some/path` (bare, no
+  Python wrapper). Returns in <100ms with exit 128 and
+  `fatal: unable to access '~/.gitconfig': Operation not permitted`.
+- `subprocess.run(['git', ...])` from `/usr/bin/python3` _outside_
+  the sandbox. Returns normally.
 - `subprocess.run(['/bin/echo', 'hello'])` _inside_ the sandbox.
-  Returns normally; non-git binaries are fine.
-- `subprocess.run(['/usr/bin/uptime'])` inside the sandbox. Fast deny
-  (uptime is not in cuttle's default allowed-exec set).
+  Returns normally.
+- `subprocess.run(['/usr/bin/uptime'])` _inside_ the sandbox. Fast
+  deny: harness suite's `exec_disallowed_binary` row reports
+  BLOCKED in <1s. uptime is not in cuttle's default allowed-exec
+  set, same as sips, yet uptime fast-denies and sips hangs.
 
-So the hang requires _all three_ of: Python parent, git grandchild,
-SBPL profile applied.
+The uptime-vs-sips asymmetry is interesting. Both binaries are
+absent from the `(allow process-exec ...)` literal set, so both
+should fail the exec at the same SBPL check. The fact that only
+sips hangs suggests the trigger is something the _grandchild
+exec setup_ does differently between the two. Plausible
+distinguishing factors (none verified):
+
+- sips is a re-execing shim (similar to `/usr/bin/python3`'s
+  shim-to-Frameworks chain) and the re-exec attempt loops; uptime
+  is a single-binary that fails exec immediately.
+- sips opens a Mach service that the SBPL doesn't grant; uptime
+  doesn't.
+- sips's argv has flag arguments; uptime's doesn't (probably not
+  the cause but worth ruling out).
 
 ## Root-cause hypothesis (unverified)
 

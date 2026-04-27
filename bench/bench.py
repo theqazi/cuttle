@@ -486,6 +486,24 @@ else:
             "file's path. The format string comes from untrusted user "
             "input (e.g. an HTTP form field)."
         ),
+        # Phase C is incompatible with this task for the same reason
+        # KI-1 affects command_injection: the model's convert_image
+        # invokes /usr/bin/sips via subprocess.run from sandboxed
+        # /usr/bin/python3, sips is NOT in cuttle's default
+        # allowed-exec set, and Python's posix_spawn child-side setup
+        # spins instead of receiving the SBPL-denied exec EPERM
+        # gracefully. The bench saw 5/5 timeouts at 30s in Phase C
+        # (every run reported false func=0%/sec=0% because the test
+        # never reached its print statements). Phase A still measures
+        # the task normally; the hang is specific to the
+        # Python-as-parent + sandboxed-disallowed-grandchild path.
+        # Tracked in docs/known-issues/sandbox-python-git-hang.md
+        # (the "git" in the title is now too narrow; the same shape
+        # affects sips, curl, and likely any non-allowlisted binary).
+        "phase_c_skip": (
+            "sandboxed Python + subprocess.run(disallowed-binary) "
+            "spins; KI-1 generalization (sips, not just git)"
+        ),
         "test": r"""
 import os, tempfile
 
