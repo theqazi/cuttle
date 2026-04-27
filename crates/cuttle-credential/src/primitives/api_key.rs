@@ -1,14 +1,33 @@
-//! [`ApiKey`]: read-once + zeroize-on-drop credential primitive.
+//! [`ApiKey`]: zeroize-on-drop credential primitive.
 //!
 //! Per `docs/PRD.md` §6.1.1 (CC-2 zeroization invariant) and `docs/TDD.md` §2.4.
 //! Constructor is `pub(crate)`: only this crate (and its submodules) can mint.
-//! Consumers in other crates receive an `&ApiKey` from credential-vault APIs and
-//! call [`ApiKey::consume`] exactly once to read the bytes for an HTTP request.
+//! Consumers in other crates receive an `&ApiKey` from credential-vault APIs
+//! and call [`ApiKey::consume`] to read the bytes for HTTP requests.
+//!
+//! ## Why not "read-once"?
+//!
+//! v0.0.1 / v0.0.2 enforced a read-once-per-instance contract: a second call
+//! to `consume()` would panic. That design predated `cuttle session start`
+//! (the multi-turn REPL) and assumed each ApiKey was used for exactly one
+//! API call. The REPL hits `messages_stream()` once per turn, each call
+//! consumes the key, and the second turn panicked the process.
+//!
+//! The read-once flag never actually added security: Rust's borrow checker
+//! already prevents the returned `&[u8]` from outliving the `&ApiKey`, so
+//! "the bytes leak past the call" was already impossible. The flag only
+//! prevented intentional reuse of the same instance, which is exactly what
+//! a multi-call session loop legitimately needs to do.
+//!
+//! v0.0.3 removes the read-once guard. The security boundary is now solely
+//! the `ZeroizeOnDrop` lifecycle: bytes are zeroed when the ApiKey drops
+//! (end of session for `cuttle session start`, end of `messages()` for
+//! `cuttle ask`). This matches the actual use case + still meets the
+//! CC-2 zeroization invariant in PRD §6.1.1.
 
-use std::cell::Cell;
 use zeroize::ZeroizeOnDrop;
 
-/// API key bytes with read-once + zeroize-on-drop semantics.
+/// API key bytes with zeroize-on-drop semantics.
 ///
 /// `Drop` zeroizes the inner `Vec<u8>`. With the workspace `panic = "abort"`
 /// release profile (per D-15), zeroization-on-panic is deterministic in
@@ -16,8 +35,6 @@ use zeroize::ZeroizeOnDrop;
 #[derive(ZeroizeOnDrop)]
 pub struct ApiKey {
     bytes: Vec<u8>,
-    #[zeroize(skip)]
-    consumed: Cell<bool>,
 }
 
 impl ApiKey {
@@ -28,10 +45,7 @@ impl ApiKey {
     /// tests exercise this path.
     #[allow(dead_code)]
     pub(crate) fn from_keychain_fetch(bytes: Vec<u8>) -> Self {
-        Self {
-            bytes,
-            consumed: Cell::new(false),
-        }
+        Self { bytes }
     }
 
     /// Mint an `ApiKey` from a process environment variable. v0.0.12 of
@@ -70,25 +84,15 @@ impl ApiKey {
         }
         Ok(Self {
             bytes: raw.into_bytes(),
-            consumed: Cell::new(false),
         })
     }
 
-    /// Read the API key bytes exactly once. Panics on second call.
-    ///
-    /// Misuse is a programmer bug, not a runtime condition. With
-    /// `panic = "abort"` (release profile per D-15), the abort is
-    /// deterministic and `ZeroizeOnDrop` runs before exit.
+    /// Read the API key bytes. Safe to call multiple times across the
+    /// ApiKey's lifetime; the borrow checker guarantees the returned
+    /// `&[u8]` cannot outlive the `&ApiKey`. The bytes are zeroed when
+    /// the ApiKey drops.
     pub fn consume(&self) -> &[u8] {
-        if self.consumed.replace(true) {
-            panic!("ApiKey::consume called twice; this is a programmer bug");
-        }
         &self.bytes
-    }
-
-    /// Returns whether the key has been consumed. Diagnostic only.
-    pub fn is_consumed(&self) -> bool {
-        self.consumed.get()
     }
 }
 
@@ -124,15 +128,18 @@ mod tests {
     fn consume_reads_bytes() {
         let k = ApiKey::from_keychain_fetch(b"sk-test-1234".to_vec());
         assert_eq!(k.consume(), b"sk-test-1234");
-        assert!(k.is_consumed());
     }
 
     #[test]
-    #[should_panic(expected = "ApiKey::consume called twice")]
-    fn double_consume_panics() {
-        let k = ApiKey::from_keychain_fetch(b"sk-test".to_vec());
-        let _ = k.consume();
-        let _ = k.consume();
+    fn consume_is_callable_multiple_times() {
+        // Regression for the cuttle session start panic on turn 2: each
+        // REPL turn calls messages_stream() → consume() and expects to
+        // get the same bytes back. Three calls here is enough to prove
+        // the pre-v0.0.3 read-once panic is gone.
+        let k = ApiKey::from_keychain_fetch(b"sk-multi".to_vec());
+        assert_eq!(k.consume(), b"sk-multi");
+        assert_eq!(k.consume(), b"sk-multi");
+        assert_eq!(k.consume(), b"sk-multi");
     }
 
     #[test]

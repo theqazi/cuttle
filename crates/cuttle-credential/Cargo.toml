@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-credential"
-version = "0.0.2"
+version = "0.0.3"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle credential vault: ApiKey + HelperHash domain primitives. v0.0.2 adds ApiKey::from_env_var for the cuttle-cli ask path; vault-only constructor invariant preserved."
+description = "Cuttle credential vault: ApiKey + HelperHash domain primitives. v0.0.3 removes the read-once consume() panic that broke cuttle session start on turn 2; ZeroizeOnDrop remains the security boundary. Vault-only constructor invariant preserved."
 
 [dependencies]
 serde.workspace = true
