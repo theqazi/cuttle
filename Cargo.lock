@@ -168,7 +168,7 @@ dependencies = [
 
 [[package]]
 name = "cuttle-cli"
-version = "0.0.16"
+version = "0.0.17"
 dependencies = [
  "chrono",
  "cuttle-anthropic",
@@ -280,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "cuttle-sandbox"
-version = "0.0.9"
+version = "0.0.11"
 dependencies = [
  "serde",
  "tempfile",

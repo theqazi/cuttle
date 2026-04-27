@@ -160,9 +160,12 @@ impl SandboxProfile {
              \x20   (subpath \"/System/Library\")\n\
              \x20   (subpath \"/Library\")\n\
              \x20   (subpath \"/private/etc\")\n\
-             \x20   (subpath \"/private/var\")\n\
-             \x20   (subpath \"/var\")\n\
              \x20   (subpath \"/etc\")\n\
+             \x20   (subpath \"/var/select\")\n\
+             \x20   (subpath \"/private/var/select\")\n\
+             \x20   (subpath \"/var/db/timezone\")\n\
+             \x20   (subpath \"/private/var/db/timezone\")\n\
+             \x20   (subpath \"/private/var/db/dyld\")\n\
              \x20   (literal \"/\")\n\
              \x20   (literal \"/dev/null\")\n\
              \x20   (literal \"/dev/random\")\n\
