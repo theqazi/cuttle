@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.12 (session 5 mid: streaming SSE + cuttle ask landed; 204/204 tests; first daily-driver-shape command works end-to-end with ANTHROPIC_API_KEY; 2026-04-26)
+**Version**: handoff-0.13 (session 5 late: streaming + cuttle ask + prompt-cache support; 212/212 tests; daily-driver-shape command works end-to-end + cost-efficient via prompt cache; 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -38,6 +38,12 @@ Commits added since handoff-0.11:
   --stdin flags; positional prompt with multi-token concatenation; tokio
   runtime built on demand; streaming output flushed after each delta so
   the operator sees real-time text.
+- `82c6941` cuttle-anthropic v0.0.10: prompt cache support. Request.system
+  is now Option<SystemContent>, an untagged serde union of Plain(String)
+  and Blocks(Vec<SystemBlock>). SystemBlock carries an optional
+  CacheControl::ephemeral() that maps to Anthropic's 5-min ephemeral cache.
+  Daily-driver impact: ~10x cost reduction on repeated long-prefix calls.
+  Backward-compat preserved via From<String> + From<&str> impls.
 
 Smoke verified by invoking the actual binary (no API key needed for error
 paths): missing-prompt error names exact next action; invalid --max-tokens
