@@ -37,14 +37,21 @@ macOS-only.
 
 ```bash
 git clone <this-repo> cuttle && cd cuttle
-./install.sh                       # builds + installs to /usr/local/bin/cuttle
-# or pick a different location:
-INSTALL_DIR=~/.local/bin ./install.sh
+./install.sh                              # builds + installs to /usr/local/bin/cuttle
+# /usr/local/bin not writable by your user? pick one:
+sudo ./install.sh                         # install to /usr/local/bin
+INSTALL_DIR=$HOME/.local/bin ./install.sh # user-local (no sudo)
+INSTALL_DIR=$HOME/bin ./install.sh        # user-local (no sudo)
 ```
 
 The install script is a thin wrapper around `cargo build --release`
-plus `cp`. Read it before running it. No sudo unless `INSTALL_DIR` is
-root-owned.
+plus `cp`. Read it before running it. It pre-flights the destination
+for writability before triggering the build, so you find out about
+permission issues in seconds, not after a 30-second cargo build.
+
+If `INSTALL_DIR` is not yet on your PATH, the script prints the exact
+`export PATH=...` line for your shell (zsh / bash / fish) and the
+exact rc file to add it to.
 
 ## Quickstart
 
@@ -160,6 +167,24 @@ cargo clippy --all-targets -- -D warnings
 
 The release binary is at `target/release/cuttle` after
 `cargo build --release`.
+
+## Uninstall
+
+```bash
+./uninstall.sh                              # removes the binary only
+INSTALL_DIR=$HOME/.local/bin ./uninstall.sh # match where you installed
+./uninstall.sh --remove-data                # also wipe ~/.cuttle/ (prompts to confirm)
+./uninstall.sh --remove-data --yes          # skip the confirmation prompt
+```
+
+By default `uninstall.sh` removes only the `cuttle` binary and
+preserves `~/.cuttle/` (your audit logs and transcripts). Pass
+`--remove-data` to wipe the session directory too; you'll be prompted
+to type "delete" to confirm unless you also pass `--yes`.
+
+The uninstaller does not modify your shell rc file. If you added
+`INSTALL_DIR` to PATH, the script will remind you that the line is
+still there but won't touch it.
 
 ## License
 

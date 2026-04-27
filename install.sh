@@ -62,13 +62,12 @@ if ! check_installable; then
 cuttle install: ERROR: cannot write to $INSTALL_DIR.
 
 Pick one:
-  sudo $0                                # install to $INSTALL_DIR
-  INSTALL_DIR=\$HOME/.local/bin $0       # user-local (no sudo)
-  INSTALL_DIR=\$HOME/bin $0              # user-local (no sudo)
+  sudo $0                            # install to $INSTALL_DIR (requires sudo)
+  INSTALL_DIR=\$HOME/.local/bin $0   # user-local (no sudo)
+  INSTALL_DIR=\$HOME/bin $0          # user-local (no sudo)
 
-If you choose a user-local path, make sure it is on your PATH:
-  echo \$PATH | tr ':' '\\n' | grep -F "\$HOME/.local/bin" \\
-    || echo 'export PATH="\$HOME/.local/bin:\$PATH"' >> ~/.zshrc
+If you pick a user-local path that is not yet on your PATH, this script
+will print the exact line to add to your shell rc on success.
 
 No build was started. Re-run with one of the options above.
 EOF
@@ -98,10 +97,52 @@ chmod 0755 "$DEST" || die "chmod failed on $DEST" 3
 say "installed: $DEST"
 "$DEST" --version
 
+# Step 6: PATH check. Tell the operator the EXACT line to add to the
+# EXACT rc file if INSTALL_DIR isn't on PATH yet.
+on_path=false
+case ":$PATH:" in
+    *":$INSTALL_DIR:"*) on_path=true ;;
+esac
+
+# Detect the operator's interactive shell + its rc file. Pick the file
+# the shell actually sources at interactive startup. macOS Catalina+
+# defaults to zsh; bash on macOS uses ~/.bash_profile (NOT ~/.bashrc)
+# for login shells, which is the daily case in Terminal.app.
+shell_name="$(basename "${SHELL:-/bin/sh}")"
+case "$shell_name" in
+    zsh)  rc_file="$HOME/.zshrc"; rc_export="export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
+    bash) rc_file="$HOME/.bash_profile"; rc_export="export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
+    fish) rc_file="$HOME/.config/fish/config.fish"; rc_export="set -gx PATH $INSTALL_DIR \$PATH" ;;
+    *)    rc_file="$HOME/.profile"; rc_export="export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
+esac
+
 cat <<EOF
 
 Next steps:
-  1. Make sure $INSTALL_DIR is on your PATH (echo \$PATH).
+EOF
+
+if $on_path; then
+    cat <<EOF
+  1. $INSTALL_DIR is already on your PATH. cuttle is ready to run.
+EOF
+else
+    cat <<EOF
+  1. $INSTALL_DIR is NOT on your PATH yet. Add this line to $rc_file:
+
+       $rc_export
+
+     One-liner to do it now (idempotent, safe to re-run):
+
+       grep -qF '$rc_export' $rc_file 2>/dev/null \\
+         || echo '$rc_export' >> $rc_file
+
+     Then reload your shell:
+
+       source $rc_file
+EOF
+fi
+
+cat <<EOF
   2. Export your Anthropic key:
        export ANTHROPIC_API_KEY="sk-ant-..."
   3. Try a one-shot:
@@ -110,5 +151,5 @@ Next steps:
        cuttle session start
 
 Session files land in ~/.cuttle/sessions/<id>/ (override with CUTTLE_HOME).
-See README.md for the full surface.
+See README.md for the full surface. To remove cuttle, run ./uninstall.sh.
 EOF
