@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-cli"
-version = "0.0.15"
+version = "0.0.16"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle top-level CLI binary. v0.0.15 wires cuttle-sandbox into the CLI: cuttle sandbox profile + cuttle sandbox run. Tool dispatch from the model loop still deferred (v0.0.16+); these subcommands give the operator direct access to the sandbox primitive for testing."
+description = "Cuttle top-level CLI binary. v0.0.16 adds cuttle credential set/show/delete (Keychain-backed) + cascade-resolve in ask + session so ANTHROPIC_API_KEY env-var becomes optional once a Keychain entry is set."
 
 [[bin]]
 name = "cuttle"
@@ -22,6 +22,7 @@ futures-util.workspace = true
 sha2.workspace = true
 rand.workspace = true
 chrono.workspace = true
+rpassword.workspace = true
 cuttle-audit = { path = "../cuttle-audit" }
 cuttle-telemetry = { path = "../cuttle-telemetry" }
 cuttle-credential = { path = "../cuttle-credential" }

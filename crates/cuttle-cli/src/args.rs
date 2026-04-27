@@ -1,6 +1,6 @@
 //! Hand-rolled argv parser for `cuttle`.
 //!
-//! Grammar v0.0.15:
+//! Grammar v0.0.16:
 //!   cuttle [--help|-h] [--version|-V]
 //!   cuttle telemetry [--json] [--falsifier-eval] [--audit-log <PATH>]
 //!   cuttle ask [--model <MODEL>] [--max-tokens <N>]
@@ -10,6 +10,9 @@
 //!                         [--api-key-env <VAR>] [--system <SYSTEM>]
 //!   cuttle sandbox profile [--project-root <PATH>]
 //!   cuttle sandbox run [--project-root <PATH>] <PROGRAM> [ARGS...]
+//!   cuttle credential set [--account <NAME>] [--from-stdin]
+//!   cuttle credential show [--account <NAME>]
+//!   cuttle credential delete [--account <NAME>]
 //!
 //! Trade-off vs `clap`: this file is now ~280 lines (with tests). Still
 //! zero supply-chain attack surface beyond `std`. clap will be worth
@@ -30,12 +33,15 @@ OPTIONS:
     -V, --version    Show version and exit
 
 SUBCOMMANDS:
-    telemetry        Show local aggregate signal from the audit log
-    ask              Send a single prompt to Claude (streaming response)
-    audit verify     Verify an audit log's HMAC chain integrity
-    session start    Start an interactive multi-turn REPL with audit chain
-    sandbox profile  Print the SBPL profile cuttle would apply
-    sandbox run      Run a command under the macOS sandbox (testing surface)
+    telemetry          Show local aggregate signal from the audit log
+    ask                Send a single prompt to Claude (streaming response)
+    audit verify       Verify an audit log's HMAC chain integrity
+    session start      Start an interactive multi-turn REPL with audit chain
+    sandbox profile    Print the SBPL profile cuttle would apply
+    sandbox run        Run a command under the macOS sandbox (testing surface)
+    credential set     Store an API key in the macOS Keychain
+    credential show    Confirm a Keychain entry exists (does NOT print the secret)
+    credential delete  Remove a Keychain entry
 
 Run `cuttle <subcommand> --help` for subcommand-specific help.
 
@@ -75,6 +81,15 @@ SANDBOX RUN OPTIONS:
     <PROGRAM> [ARGS...]         Program + args to execute under the sandbox.
                                 The program must be in the default-allowed
                                 binary set; otherwise the sandbox denies exec.
+
+CREDENTIAL OPTIONS (set / show / delete share the --account flag):
+    --account <NAME>            Keychain account name (default: ANTHROPIC_API_KEY).
+                                Cuttle stores under service \"dev.cuttle.api-keys\".
+
+CREDENTIAL SET OPTIONS:
+    --from-stdin                Read the secret from stdin instead of prompting.
+                                Useful for piping from a password manager.
+                                Default: prompt on the TTY with no echo.
 ";
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -115,6 +130,10 @@ pub enum ParseError {
     UnknownSandboxSubcommand(String),
     #[error("missing required <PROGRAM> for `cuttle sandbox run`")]
     MissingProgram,
+    #[error("missing credential subcommand; expected `set`, `show`, or `delete`")]
+    MissingCredentialSubcommand,
+    #[error("unknown credential subcommand: {0}")]
+    UnknownCredentialSubcommand(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -130,6 +149,50 @@ pub enum Command {
     SessionStart(SessionStartArgs),
     SandboxProfile(SandboxProfileArgs),
     SandboxRun(SandboxRunArgs),
+    CredentialSet(CredentialSetArgs),
+    CredentialShow(CredentialShowArgs),
+    CredentialDelete(CredentialDeleteArgs),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CredentialSetArgs {
+    pub account: String,
+    pub from_stdin: bool,
+}
+
+impl Default for CredentialSetArgs {
+    fn default() -> Self {
+        CredentialSetArgs {
+            account: "ANTHROPIC_API_KEY".to_string(),
+            from_stdin: false,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CredentialShowArgs {
+    pub account: String,
+}
+
+impl Default for CredentialShowArgs {
+    fn default() -> Self {
+        CredentialShowArgs {
+            account: "ANTHROPIC_API_KEY".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CredentialDeleteArgs {
+    pub account: String,
+}
+
+impl Default for CredentialDeleteArgs {
+    fn default() -> Self {
+        CredentialDeleteArgs {
+            account: "ANTHROPIC_API_KEY".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -272,6 +335,33 @@ impl Cli {
                     }
                     "-h" | "--help" => Err(ParseError::HelpRequested),
                     other => Err(ParseError::UnknownSandboxSubcommand(other.to_string())),
+                }
+            }
+            "credential" => {
+                let sub = iter.next().ok_or(ParseError::MissingCredentialSubcommand)?;
+                match sub.as_str() {
+                    "set" => {
+                        let args = parse_credential_set_args(&mut iter)?;
+                        Ok(Cli {
+                            command: Command::CredentialSet(args),
+                        })
+                    }
+                    "show" => {
+                        let args = parse_credential_account_only_args(&mut iter)?;
+                        Ok(Cli {
+                            command: Command::CredentialShow(CredentialShowArgs { account: args }),
+                        })
+                    }
+                    "delete" => {
+                        let args = parse_credential_account_only_args(&mut iter)?;
+                        Ok(Cli {
+                            command: Command::CredentialDelete(CredentialDeleteArgs {
+                                account: args,
+                            }),
+                        })
+                    }
+                    "-h" | "--help" => Err(ParseError::HelpRequested),
+                    other => Err(ParseError::UnknownCredentialSubcommand(other.to_string())),
                 }
             }
             other => Err(ParseError::UnknownSubcommand(other.to_string())),
@@ -450,6 +540,47 @@ where
         program,
         args: child_args,
     })
+}
+
+fn parse_credential_set_args<'a, I>(iter: &mut I) -> Result<CredentialSetArgs, ParseError>
+where
+    I: Iterator<Item = &'a String>,
+{
+    let mut args = CredentialSetArgs::default();
+    while let Some(tok) = iter.next() {
+        match tok.as_str() {
+            "--account" => {
+                let val = iter.next().ok_or(ParseError::MissingValue("--account"))?;
+                args.account = val.clone();
+            }
+            "--from-stdin" => args.from_stdin = true,
+            "-h" | "--help" => return Err(ParseError::HelpRequested),
+            other => return Err(ParseError::UnknownOption(other.to_string())),
+        }
+    }
+    Ok(args)
+}
+
+/// Shared parser for `cuttle credential show` + `cuttle credential delete`.
+/// Returns just the account name; the caller wraps it in the right
+/// args struct. Both subcommands accept only --account; this avoids
+/// near-duplicate parser fns.
+fn parse_credential_account_only_args<'a, I>(iter: &mut I) -> Result<String, ParseError>
+where
+    I: Iterator<Item = &'a String>,
+{
+    let mut account = "ANTHROPIC_API_KEY".to_string();
+    while let Some(tok) = iter.next() {
+        match tok.as_str() {
+            "--account" => {
+                let val = iter.next().ok_or(ParseError::MissingValue("--account"))?;
+                account = val.clone();
+            }
+            "-h" | "--help" => return Err(ParseError::HelpRequested),
+            other => return Err(ParseError::UnknownOption(other.to_string())),
+        }
+    }
+    Ok(account)
 }
 
 fn parse_session_start_args<'a, I>(iter: &mut I) -> Result<SessionStartArgs, ParseError>

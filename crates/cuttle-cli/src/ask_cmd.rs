@@ -20,7 +20,7 @@
 
 use crate::args::{AskArgs, PromptSource};
 use cuttle_anthropic::{AnthropicClient, ClientConfig, KnownModel, Message, Model, Request};
-use cuttle_credential::{ApiKey, ApiKeyEnvError};
+use cuttle_credential::{ApiKey, ResolveError};
 use futures_util::StreamExt;
 use std::io::{Read, Write};
 use thiserror::Error;
@@ -28,7 +28,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum AskCmdError {
     #[error("could not load API key: {0}")]
-    ApiKey(#[from] ApiKeyEnvError),
+    ApiKey(#[from] ResolveError),
 
     #[error("could not read prompt from stdin: {0}")]
     StdinRead(std::io::Error),
@@ -67,7 +67,7 @@ pub fn run<W: Write>(args: &AskArgs, out: &mut W) -> Result<(), AskCmdError> {
         }
     };
 
-    let api_key = ApiKey::from_env_var(&args.api_key_env)?;
+    let api_key = ApiKey::resolve(&args.api_key_env)?;
 
     let model = parse_model(&args.model);
     let request = Request::new(model, vec![Message::user_text(prompt)], args.max_tokens);
@@ -147,23 +147,27 @@ mod tests {
     }
 
     /// We can't run a live API call in unit tests (no key, no network).
-    /// Validate the wiring shape: the run() function fails cleanly on
-    /// missing API key with a specific, named error.
+    /// Validate the wiring shape: the run() function fails cleanly when
+    /// neither the env var nor a Keychain entry holds a credential.
+    /// With the v0.0.16 cascade, the failure surface is now
+    /// ResolveError::NoCredentialFound instead of ApiKeyEnvError::NotSet.
     #[test]
-    fn run_errors_when_api_key_env_unset() {
-        // Use a name that's almost certainly not in the test env.
+    fn run_errors_when_no_credential_anywhere() {
+        // Use an account name that's almost certainly not in env AND
+        // not in the test machine's Keychain.
+        let account = "CUTTLE_TEST_DEFINITELY_UNSET_KEY_VAR";
         let args = AskArgs {
-            api_key_env: "CUTTLE_TEST_DEFINITELY_UNSET_KEY_VAR".to_string(),
+            api_key_env: account.to_string(),
             source: PromptSource::Inline("hello".to_string()),
             ..AskArgs::default()
         };
         let mut out = Vec::new();
         let err = run(&args, &mut out).unwrap_err();
         match err {
-            AskCmdError::ApiKey(ApiKeyEnvError::NotSet { var }) => {
-                assert_eq!(var, "CUTTLE_TEST_DEFINITELY_UNSET_KEY_VAR");
+            AskCmdError::ApiKey(ResolveError::NoCredentialFound { account: a }) => {
+                assert_eq!(a, account);
             }
-            other => panic!("expected ApiKey(NotSet), got {other:?}"),
+            other => panic!("expected ApiKey(NoCredentialFound), got {other:?}"),
         }
     }
 }

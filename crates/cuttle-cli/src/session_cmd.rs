@@ -36,7 +36,7 @@ use cuttle_anthropic::{
     SystemContent,
 };
 use cuttle_audit::{AuditChain, AuditChainKey, AuditEvent};
-use cuttle_credential::{ApiKey, ApiKeyEnvError};
+use cuttle_credential::{ApiKey, ResolveError};
 use futures_util::StreamExt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -47,7 +47,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum SessionCmdError {
     #[error("could not load API key: {0}")]
-    ApiKey(#[from] ApiKeyEnvError),
+    ApiKey(#[from] ResolveError),
 
     #[error("could not resolve cuttle home directory; set CUTTLE_HOME or HOME")]
     NoCuttleHome,
@@ -151,7 +151,7 @@ pub fn run(args: &SessionStartArgs) -> Result<(), SessionCmdError> {
         })?;
 
     // API key + Anthropic client.
-    let api_key = ApiKey::from_env_var(&args.api_key_env)?;
+    let api_key = ApiKey::resolve(&args.api_key_env)?;
     let client =
         AnthropicClient::new(ClientConfig::default()).map_err(SessionCmdError::ClientBuild)?;
 
@@ -455,17 +455,19 @@ mod tests {
     }
 
     #[test]
-    fn run_errors_when_api_key_env_unset() {
-        // Runs the path up to ApiKey::from_env_var which fails fast.
+    fn run_errors_when_no_credential_anywhere() {
+        // Runs the path up to ApiKey::resolve which fails fast.
         // This validates that:
         // (a) mint_session_id + create_dir succeed,
         // (b) chain key file gets written under a temp CUTTLE_HOME,
-        // (c) ApiKey::from_env_var failure surfaces cleanly.
+        // (c) ApiKey::resolve failure surfaces cleanly when neither env
+        //     nor Keychain holds a credential.
         let tmp = tempfile::TempDir::new().unwrap();
         let prev = std::env::var("CUTTLE_HOME").ok();
         unsafe { std::env::set_var("CUTTLE_HOME", tmp.path()) };
+        let account = "CUTTLE_TEST_NEVER_SET_KEY_VAR";
         let args = SessionStartArgs {
-            api_key_env: "CUTTLE_TEST_NEVER_SET_KEY_VAR".to_string(),
+            api_key_env: account.to_string(),
             ..SessionStartArgs::default()
         };
         let err = run(&args).unwrap_err();
@@ -475,10 +477,10 @@ mod tests {
             None => unsafe { std::env::remove_var("CUTTLE_HOME") },
         }
         match err {
-            SessionCmdError::ApiKey(ApiKeyEnvError::NotSet { var }) => {
-                assert_eq!(var, "CUTTLE_TEST_NEVER_SET_KEY_VAR");
+            SessionCmdError::ApiKey(ResolveError::NoCredentialFound { account: a }) => {
+                assert_eq!(a, account);
             }
-            other => panic!("expected ApiKey(NotSet), got {other:?}"),
+            other => panic!("expected ApiKey(NoCredentialFound), got {other:?}"),
         }
     }
 }

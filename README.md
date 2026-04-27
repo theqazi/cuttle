@@ -55,10 +55,43 @@ exact rc file to add it to.
 
 ## Quickstart
 
+Two ways to give cuttle your API key. Pick one:
+
+### Option A: macOS Keychain (recommended)
+
+```bash
+cuttle credential set                       # prompts on TTY, no echo
+# (paste sk-ant-... and press enter)
+cuttle credential show                      # confirms entry exists
+                                            # (does NOT print the secret)
+cuttle ask "say hi in three words"
+# claude> Hello, hi there!
+```
+
+The first time `cuttle ask` (or `cuttle session start`) reads the entry,
+macOS prompts you to authorize cuttle. Pick "Always Allow" if you want
+silent access on subsequent runs; pick "Allow" to be re-prompted each
+time. Either choice is recorded in the audit log via the
+`KeychainAlwaysAllowToggled` event.
+
+### Option B: environment variable (no Keychain)
+
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
 cuttle ask "say hi in three words"
-# claude> Hello, hi there!
+```
+
+The env var still works (and takes precedence over Keychain). Useful
+for CI / scripted runs where Keychain access isn't available.
+
+### Multi-key setups
+
+Pass `--account NAME` to use a different Keychain account (and the
+matching env var name). Useful for separate test vs prod keys:
+
+```bash
+cuttle credential set --account ANTHROPIC_API_KEY_TEST
+cuttle ask --api-key-env ANTHROPIC_API_KEY_TEST "what's 2+2?"
 ```
 
 For an interactive session with full audit + transcript:
@@ -152,8 +185,8 @@ For the full threat model, see `docs/PRD.md` §6 + `docs/TDD.md` §5.
 - No conversation resume across `cuttle` invocations. Each
   `cuttle session start` is a fresh session; the audit log + transcript
   are the durable record.
-- No Keychain integration yet. `ANTHROPIC_API_KEY` must be in your
-  environment. Keychain backend is v0.2 scope.
+- macOS Keychain integration works (`cuttle credential set/show/delete`);
+  Linux Secret Service / Windows Credential Manager are v0.2 scope.
 - TLS pinning is not implemented. Cuttle trusts the operator's CA store
   for `api.anthropic.com`. Documented limitation; v0.2 scope.
 

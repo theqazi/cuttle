@@ -24,6 +24,7 @@ pub mod args;
 pub mod ask_cmd;
 pub mod audit_cmd;
 pub mod banner;
+pub mod credential_cmd;
 pub mod paths;
 pub mod sandbox_cmd;
 pub mod session_cmd;
@@ -32,8 +33,9 @@ pub mod telemetry_cmd;
 use std::io::Write;
 
 pub use args::{
-    AskArgs, AuditVerifyArgs, Cli, Command, ParseError, PromptSource, SandboxProfileArgs,
-    SandboxRunArgs, SessionStartArgs, TelemetryArgs,
+    AskArgs, AuditVerifyArgs, Cli, Command, CredentialDeleteArgs, CredentialSetArgs,
+    CredentialShowArgs, ParseError, PromptSource, SandboxProfileArgs, SandboxRunArgs,
+    SessionStartArgs, TelemetryArgs,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -55,6 +57,9 @@ pub enum CliError {
 
     #[error("sandbox subcommand failed: {0}")]
     Sandbox(#[from] sandbox_cmd::SandboxCmdError),
+
+    #[error("credential subcommand failed: {0}")]
+    Credential(#[from] credential_cmd::CredentialCmdError),
 }
 
 /// CLI entry point. `argv` should INCLUDE the program name as `argv[0]`,
@@ -128,6 +133,27 @@ pub fn run<W: Write, E: Write>(argv: &[String], stdout: &mut W, stderr: &mut E) 
             }
             Err(e) => {
                 let _ = writeln!(stderr, "cuttle sandbox run: {e}");
+                2
+            }
+        },
+        Command::CredentialSet(args) => match credential_cmd::run_set(&args, stdout) {
+            Ok(()) => 0,
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle credential set: {e}");
+                2
+            }
+        },
+        Command::CredentialShow(args) => match credential_cmd::run_show(&args, stdout) {
+            Ok(()) => 0,
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle credential show: {e}");
+                2
+            }
+        },
+        Command::CredentialDelete(args) => match credential_cmd::run_delete(&args, stdout) {
+            Ok(()) => 0,
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle credential delete: {e}");
                 2
             }
         },
