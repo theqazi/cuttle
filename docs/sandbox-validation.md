@@ -194,6 +194,8 @@ overridden by a later `(deny ...)` and re-allowed by a later
 
 ### KI-1: Python-subprocess-of-git hang under sandbox
 
+Full write-up: [`known-issues/sandbox-python-git-hang.md`](known-issues/sandbox-python-git-hang.md).
+
 **Symptom.** `cuttle sandbox run /usr/bin/python3 program.py` where
 `program.py` calls `subprocess.run(['git', ...])` causes the sandboxed
 Python child to spin at 99% CPU indefinitely. Bare `cuttle sandbox run
