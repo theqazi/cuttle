@@ -34,6 +34,46 @@ impl ApiKey {
         }
     }
 
+    /// Mint an `ApiKey` from a process environment variable. v0.0.12 of
+    /// cuttle-cli's `cuttle ask` uses this for the ANTHROPIC_API_KEY
+    /// path; the Keychain backend will be the daily-driver path once
+    /// it lands.
+    ///
+    /// Validation:
+    /// - Variable must be set and non-empty.
+    /// - Value must be valid UTF-8 (env vars on Unix are bytes; non-UTF8
+    ///   keys are almost certainly a corrupt shell config).
+    /// - Leading + trailing whitespace is rejected (common copy-paste
+    ///   footgun: pasting from a chat / docs page often appends a
+    ///   newline and the resulting auth header would 401).
+    ///
+    /// Constructor stays in this crate so the vault-crate-mints-only
+    /// invariant from D-2026-04-26-17 holds.
+    pub fn from_env_var(var_name: &str) -> Result<Self, ApiKeyEnvError> {
+        let raw = std::env::var(var_name).map_err(|e| match e {
+            std::env::VarError::NotPresent => ApiKeyEnvError::NotSet {
+                var: var_name.to_string(),
+            },
+            std::env::VarError::NotUnicode(_) => ApiKeyEnvError::NonUtf8 {
+                var: var_name.to_string(),
+            },
+        })?;
+        if raw.is_empty() {
+            return Err(ApiKeyEnvError::Empty {
+                var: var_name.to_string(),
+            });
+        }
+        if raw != raw.trim() {
+            return Err(ApiKeyEnvError::SurroundingWhitespace {
+                var: var_name.to_string(),
+            });
+        }
+        Ok(Self {
+            bytes: raw.into_bytes(),
+            consumed: Cell::new(false),
+        })
+    }
+
     /// Read the API key bytes exactly once. Panics on second call.
     ///
     /// Misuse is a programmer bug, not a runtime condition. With
@@ -54,6 +94,27 @@ impl ApiKey {
 
 // No Display, Debug, Clone derives. ApiKey leaves the credential vault
 // crate ONLY through `ApiKey::consume()`.
+
+/// Error variants for `ApiKey::from_env_var`. Each variant names the
+/// failed env-var so the operator gets a specific, actionable message
+/// (CLAUDE.md §0c operational empathy).
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+pub enum ApiKeyEnvError {
+    #[error("environment variable {var} is not set; export it before running cuttle")]
+    NotSet { var: String },
+
+    #[error("environment variable {var} is set but empty")]
+    Empty { var: String },
+
+    #[error("environment variable {var} contains non-UTF8 bytes; check your shell config")]
+    NonUtf8 { var: String },
+
+    #[error(
+        "environment variable {var} has leading or trailing whitespace; \
+         strip it before re-running (this is usually a copy-paste artifact)"
+    )]
+    SurroundingWhitespace { var: String },
+}
 
 #[cfg(test)]
 mod tests {
@@ -95,5 +156,86 @@ mod tests {
             // memory). We only assert the slice is not the original bytes.
             assert_ne!(slice, b"sk-zero-test");
         }
+    }
+
+    /// Helper: scope a CUTTLE_TEST_API_KEY env-var override + restore.
+    /// Same shape as cuttle-cli/src/paths.rs; std::env mutation is unsafe
+    /// in 2024 edition because env is process-global.
+    fn with_env_var<F: FnOnce()>(name: &str, value: Option<&str>, f: F) {
+        let prev = std::env::var(name).ok();
+        match value {
+            Some(v) => unsafe { std::env::set_var(name, v) },
+            None => unsafe { std::env::remove_var(name) },
+        }
+        f();
+        match prev {
+            Some(p) => unsafe { std::env::set_var(name, p) },
+            None => unsafe { std::env::remove_var(name) },
+        }
+    }
+
+    #[test]
+    fn from_env_var_succeeds_for_valid_value() {
+        with_env_var("CUTTLE_TEST_API_KEY_OK", Some("sk-test-abc123"), || {
+            let k = ApiKey::from_env_var("CUTTLE_TEST_API_KEY_OK").unwrap();
+            assert_eq!(k.consume(), b"sk-test-abc123");
+        });
+    }
+
+    #[test]
+    fn from_env_var_errors_when_unset() {
+        with_env_var("CUTTLE_TEST_API_KEY_MISSING", None, || {
+            let r = ApiKey::from_env_var("CUTTLE_TEST_API_KEY_MISSING");
+            assert!(matches!(r, Err(ApiKeyEnvError::NotSet { .. })));
+        });
+    }
+
+    #[test]
+    fn from_env_var_errors_when_empty() {
+        with_env_var("CUTTLE_TEST_API_KEY_EMPTY", Some(""), || {
+            let r = ApiKey::from_env_var("CUTTLE_TEST_API_KEY_EMPTY");
+            assert!(matches!(r, Err(ApiKeyEnvError::Empty { .. })));
+        });
+    }
+
+    #[test]
+    fn from_env_var_errors_on_leading_whitespace() {
+        with_env_var("CUTTLE_TEST_API_KEY_LEAD", Some(" sk-test"), || {
+            let r = ApiKey::from_env_var("CUTTLE_TEST_API_KEY_LEAD");
+            assert!(matches!(
+                r,
+                Err(ApiKeyEnvError::SurroundingWhitespace { .. })
+            ));
+        });
+    }
+
+    #[test]
+    fn from_env_var_errors_on_trailing_newline() {
+        with_env_var("CUTTLE_TEST_API_KEY_TRAIL", Some("sk-test\n"), || {
+            let r = ApiKey::from_env_var("CUTTLE_TEST_API_KEY_TRAIL");
+            assert!(matches!(
+                r,
+                Err(ApiKeyEnvError::SurroundingWhitespace { .. })
+            ));
+        });
+    }
+
+    #[test]
+    fn from_env_var_error_message_names_the_var() {
+        with_env_var("CUTTLE_TEST_API_KEY_NAMED", None, || {
+            // Manual match instead of unwrap_err: Result::unwrap_err requires
+            // T: Debug, but ApiKey deliberately has no Debug derive to avoid
+            // leaking secret bytes in panic output.
+            let r = ApiKey::from_env_var("CUTTLE_TEST_API_KEY_NAMED");
+            let err = match r {
+                Err(e) => e,
+                Ok(_) => panic!("expected error, got Ok"),
+            };
+            let msg = format!("{err}");
+            assert!(
+                msg.contains("CUTTLE_TEST_API_KEY_NAMED"),
+                "error message should name the var, got: {msg}"
+            );
+        });
     }
 }

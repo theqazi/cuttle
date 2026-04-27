@@ -12,6 +12,6 @@
 pub mod primitives;
 pub mod record;
 
-pub use primitives::api_key::ApiKey;
+pub use primitives::api_key::{ApiKey, ApiKeyEnvError};
 pub use primitives::helper_hash::HelperHash;
 pub use record::{CredentialBackend, CredentialRecord};
