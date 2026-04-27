@@ -1,0 +1,16 @@
+[package]
+name = "cuttle-telemetry"
+version = "0.0.10"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle local-only telemetry surface. Aggregates audit-log events into operator-readable reports per PRD §6.1.6 + D-2026-04-26-04 + D-2026-04-26-09. Composes cuttle-falsifiers evaluators for the --falsifier-eval CLI subcommand. NO remote anything; everything is operator-visible only."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+cuttle-audit = { path = "../cuttle-audit" }
+cuttle-falsifiers = { path = "../cuttle-falsifiers" }

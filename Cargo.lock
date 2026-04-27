@@ -262,6 +262,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuttle-telemetry"
+version = "0.0.10"
+dependencies = [
+ "cuttle-audit",
+ "cuttle-falsifiers",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
