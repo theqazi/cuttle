@@ -34,7 +34,7 @@ pub mod aggregate;
 pub mod report;
 
 pub use aggregate::{
-    AbandonSummary, OverrideSummary, PolicyDecisionSummary, ToolDispatchSummary,
-    summarize,
+    summarize, AbandonSummary, OverrideSummary, PolicyDecisionSummary, SessionSummary,
+    ToolDispatchSummary,
 };
 pub use report::TelemetryReport;

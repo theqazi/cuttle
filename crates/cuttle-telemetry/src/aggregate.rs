@@ -48,6 +48,18 @@ pub struct OverrideSummary {
     pub keychain_always_allow_disabled: u64,
 }
 
+/// Per-session conversation summary. Counts of UserPrompt / AssistantResponse
+/// events plus aggregate token spend (sum across all AssistantResponse events).
+/// Aggregate-only: content lives in the per-session transcript file, not in
+/// the audit log; this struct never holds prompt or response text.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct SessionSummary {
+    pub user_prompts: u64,
+    pub assistant_responses: u64,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct AbandonSummary {
     /// `dispatch_count − completed_count` per tool, clamped to ≥0. A
@@ -64,14 +76,15 @@ struct SummarizeState {
     dispatch: ToolDispatchSummary,
     decisions: PolicyDecisionSummary,
     overrides: OverrideSummary,
+    session: SessionSummary,
     completed_by_tool: BTreeMap<String, u64>,
 }
 
 /// Single-pass summary over the event stream.
 ///
-/// Returns `(dispatch, decisions, overrides, abandons)` so callers can
-/// assemble whatever shape they want without paying for a stand-alone
-/// scan per metric.
+/// Returns `(dispatch, decisions, overrides, abandons, session)`.
+/// Single pass so even a 100k-entry audit log doesn't pay for a scan
+/// per metric.
 pub fn summarize<'a, I>(
     events: I,
 ) -> (
@@ -79,6 +92,7 @@ pub fn summarize<'a, I>(
     PolicyDecisionSummary,
     OverrideSummary,
     AbandonSummary,
+    SessionSummary,
 )
 where
     I: IntoIterator<Item = &'a AuditEvent>,
@@ -118,6 +132,16 @@ where
             AuditEvent::KeychainAlwaysAllowToggled { enabled: false } => {
                 state.overrides.keychain_always_allow_disabled += 1;
             }
+            AuditEvent::UserPrompt { .. } => state.session.user_prompts += 1,
+            AuditEvent::AssistantResponse {
+                input_tokens,
+                output_tokens,
+                ..
+            } => {
+                state.session.assistant_responses += 1;
+                state.session.total_input_tokens += *input_tokens as u64;
+                state.session.total_output_tokens += *output_tokens as u64;
+            }
         }
     }
 
@@ -131,7 +155,13 @@ where
         }
     }
 
-    (state.dispatch, state.decisions, state.overrides, abandons)
+    (
+        state.dispatch,
+        state.decisions,
+        state.overrides,
+        abandons,
+        state.session,
+    )
 }
 
 #[cfg(test)]
@@ -167,7 +197,7 @@ mod tests {
     #[test]
     fn dispatch_summary_counts_by_tool_name() {
         let events = [dispatch("bash"), dispatch("bash"), dispatch("read")];
-        let (d, _, _, _) = summarize(events.iter());
+        let (d, _, _, _, _) = summarize(events.iter());
         assert_eq!(d.by_tool.get("bash"), Some(&2));
         assert_eq!(d.by_tool.get("read"), Some(&1));
         assert_eq!(d.total, 3);
@@ -182,7 +212,7 @@ mod tests {
             decision("Deny"),
             decision("Prompt"),
         ];
-        let (_, d, _, _) = summarize(events.iter());
+        let (_, d, _, _, _) = summarize(events.iter());
         assert_eq!(d.allow, 2);
         assert_eq!(d.warn, 1);
         assert_eq!(d.deny, 1);
@@ -193,7 +223,7 @@ mod tests {
     #[test]
     fn decision_summary_buckets_unknown_into_other() {
         let events = [decision("FutureClass")];
-        let (_, d, _, _) = summarize(events.iter());
+        let (_, d, _, _, _) = summarize(events.iter());
         assert_eq!(d.other, 1);
         assert_eq!(d.allow, 0);
     }
@@ -219,7 +249,7 @@ mod tests {
             AuditEvent::KeychainAlwaysAllowToggled { enabled: true },
             AuditEvent::KeychainAlwaysAllowToggled { enabled: false },
         ];
-        let (_, _, o, _) = summarize(events.iter());
+        let (_, _, o, _, _) = summarize(events.iter());
         assert_eq!(o.gate_disabled, 1);
         assert_eq!(o.chain_rotated, 1);
         assert_eq!(o.restored_from_backup, 1);
@@ -236,7 +266,7 @@ mod tests {
             result("bash", true),
             // 2 dispatches − 1 result = 1 abandon.
         ];
-        let (_, _, _, a) = summarize(events.iter());
+        let (_, _, _, a, _) = summarize(events.iter());
         assert_eq!(a.by_tool.get("bash"), Some(&1));
         assert_eq!(a.total, 1);
     }
@@ -246,7 +276,7 @@ mod tests {
         // Audit log inconsistency (shouldn't happen) clamps to 0
         // rather than producing a negative or nonsense entry.
         let events = [dispatch("bash"), result("bash", true), result("bash", true)];
-        let (_, _, _, a) = summarize(events.iter());
+        let (_, _, _, a, _) = summarize(events.iter());
         assert_eq!(a.by_tool.get("bash"), None);
         assert_eq!(a.total, 0);
     }
@@ -256,24 +286,62 @@ mod tests {
         // success=false is still "completed" — the tool returned, just with
         // an error. abandon counts only "no result at all".
         let events = [dispatch("bash"), result("bash", false)];
-        let (_, _, _, a) = summarize(events.iter());
+        let (_, _, _, a, _) = summarize(events.iter());
         assert_eq!(a.total, 0);
     }
 
     #[test]
     fn empty_event_stream_produces_all_zero_summaries() {
         let events: Vec<AuditEvent> = vec![];
-        let (d, p, o, a) = summarize(events.iter());
+        let (d, p, o, a, _) = summarize(events.iter());
         assert_eq!(d.total, 0);
         assert_eq!(p, PolicyDecisionSummary::default());
         assert_eq!(o, OverrideSummary::default());
         assert_eq!(a.total, 0);
     }
 
+    fn user_prompt(digest: u8, len: usize) -> AuditEvent {
+        AuditEvent::UserPrompt {
+            content_sha256: [digest; 32],
+            length: len,
+        }
+    }
+
+    fn assistant_response(digest: u8, len: usize, in_t: u32, out_t: u32) -> AuditEvent {
+        AuditEvent::AssistantResponse {
+            content_sha256: [digest; 32],
+            length: len,
+            input_tokens: in_t,
+            output_tokens: out_t,
+        }
+    }
+
+    #[test]
+    fn session_summary_counts_user_and_assistant_turns() {
+        let events = [
+            user_prompt(1, 10),
+            assistant_response(2, 20, 5, 15),
+            user_prompt(3, 30),
+            assistant_response(4, 40, 25, 35),
+        ];
+        let (_, _, _, _, s) = summarize(events.iter());
+        assert_eq!(s.user_prompts, 2);
+        assert_eq!(s.assistant_responses, 2);
+        assert_eq!(s.total_input_tokens, 30);
+        assert_eq!(s.total_output_tokens, 50);
+    }
+
+    #[test]
+    fn session_summary_zero_when_no_turns() {
+        let events = [dispatch("bash")];
+        let (_, _, _, _, s) = summarize(events.iter());
+        assert_eq!(s, SessionSummary::default());
+    }
+
     #[test]
     fn dispatch_summary_uses_btree_for_stable_ordering() {
         let events = [dispatch("zsh"), dispatch("ash"), dispatch("bash")];
-        let (d, _, _, _) = summarize(events.iter());
+        let (d, _, _, _, _) = summarize(events.iter());
         let keys: Vec<&String> = d.by_tool.keys().collect();
         // BTreeMap orders alphabetically.
         assert_eq!(keys, vec!["ash", "bash", "zsh"]);

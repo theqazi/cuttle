@@ -125,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "cuttle-anthropic"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "cuttle-credential",
  "eventsource-stream",
@@ -140,7 +140,7 @@ dependencies = [
 
 [[package]]
 name = "cuttle-audit"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "chrono",
  "cuttle-gate",
@@ -158,7 +158,7 @@ dependencies = [
 
 [[package]]
 name = "cuttle-cli"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "cuttle-anthropic",
  "cuttle-audit",
@@ -282,7 +282,7 @@ dependencies = [
 
 [[package]]
 name = "cuttle-telemetry"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "cuttle-audit",
  "cuttle-falsifiers",

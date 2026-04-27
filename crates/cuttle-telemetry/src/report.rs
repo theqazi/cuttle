@@ -14,7 +14,8 @@
 //! operator chose; there is no upload path.
 
 use crate::aggregate::{
-    summarize, AbandonSummary, OverrideSummary, PolicyDecisionSummary, ToolDispatchSummary,
+    summarize, AbandonSummary, OverrideSummary, PolicyDecisionSummary, SessionSummary,
+    ToolDispatchSummary,
 };
 use cuttle_audit::AuditEvent;
 use cuttle_falsifiers::{
@@ -42,6 +43,7 @@ pub struct TelemetryReport {
     pub decisions: PolicyDecisionSummary,
     pub overrides: OverrideSummary,
     pub abandons: AbandonSummary,
+    pub session: SessionSummary,
     /// Present only when `with_falsifiers()` was used.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub falsifiers: Vec<FalsifierReport>,
@@ -52,12 +54,13 @@ impl TelemetryReport {
     where
         I: IntoIterator<Item = &'a AuditEvent>,
     {
-        let (dispatch, decisions, overrides, abandons) = summarize(events);
+        let (dispatch, decisions, overrides, abandons, session) = summarize(events);
         TelemetryReport {
             dispatch,
             decisions,
             overrides,
             abandons,
+            session,
             falsifiers: Vec::new(),
         }
     }
@@ -160,6 +163,25 @@ impl fmt::Display for TelemetryReport {
                 writeln!(f, "  {tool:32} {count}")?;
             }
         }
+        writeln!(f)?;
+
+        writeln!(f, "Conversation (across all sessions in this log):")?;
+        writeln!(f, "  user prompts:        {}", self.session.user_prompts)?;
+        writeln!(
+            f,
+            "  assistant responses: {}",
+            self.session.assistant_responses
+        )?;
+        writeln!(
+            f,
+            "  total input tokens:  {}",
+            self.session.total_input_tokens
+        )?;
+        writeln!(
+            f,
+            "  total output tokens: {}",
+            self.session.total_output_tokens
+        )?;
 
         if !self.falsifiers.is_empty() {
             writeln!(f)?;

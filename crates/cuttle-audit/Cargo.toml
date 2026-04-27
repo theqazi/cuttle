@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-audit"
-version = "0.0.3"
+version = "0.0.4"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle audit log: HMAC chain + ToolRegistry + secret_bearing tagging. Per docs/TDD.md §5."
+description = "Cuttle audit log: HMAC chain + ToolRegistry + secret_bearing tagging. v0.0.4 adds UserPrompt + AssistantResponse event variants for cuttle session start; content stays in transcript, audit log carries digest+length only. Per docs/TDD.md §5."
 
 [dependencies]
 serde.workspace = true
