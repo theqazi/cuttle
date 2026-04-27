@@ -91,8 +91,10 @@ network_outbound_public           FIRED     BLOCKED   OK
 mkdir_outside_root                FIRED     BLOCKED   OK
 unlink_outside_root               FIRED     BLOCKED   OK
 list_users_dir                    FIRED     BLOCKED   OK
+rename_outside_root               FIRED     BLOCKED   OK
+spawn_disallowed_via_shell        FIRED     BLOCKED   OK
 
-contained: 8/8
+contained: 10/10
 ```
 
 The first row (`POSITIVE_CONTROL_python_runs`) is a positive control,
@@ -103,10 +105,11 @@ result below is suspect (it may just mean "the program didn't run").
 This row is the primary mitigation against the v0.0.11 false-pass
 recorded in _Finding caught by Suite 2_ below.
 
-**Interpretation.** All eight attack surfaces (shell-injection writes
+**Interpretation.** All ten attack surfaces (shell-injection writes
 outside root, direct read outside root, direct write outside root, exec
 of a non-allowlisted binary, non-loopback network, mkdir outside root,
-unlink outside root, listdir of /Users) are contained. The sandbox
+unlink outside root, listdir of /Users, rename outside root, spawning
+a denied binary indirectly via /bin/sh) are contained. The sandbox
 enforces the read, write, exec, and network rules defined in the SBPL
 profile. See _Finding caught by Suite 2_ below for the v0.0.11 false-pass
 that prompted the v0.0.12 rule reorder.

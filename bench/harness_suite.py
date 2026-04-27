@@ -294,6 +294,51 @@ except Exception as e:
     print(f'BLOCKED:{type(e).__name__}')
 """,
     },
+    # chmod_outside_root was tried as an exploit and dropped: the
+    # `setup_outside_file_exists` check_fired closure tests "file was
+    # deleted," but chmod doesn't delete; a chmod-specific setup would
+    # need to capture the original mode and check for change. Skipped
+    # for v1; file-write* coverage is already proven by
+    # unlink_outside_root and rename_outside_root.
+    {
+        "id": "rename_outside_root",
+        "desc": "os.rename() moves an outside-root file to a new outside-root name",
+        "setup": lambda: setup_outside_file_exists("ATTACK_RENAME_TARGET"),
+        "attack": r"""
+import os
+src = os.environ['ATTACK_RENAME_TARGET']
+dst = src + '.renamed'
+try:
+    os.rename(src, dst)
+    print(f'renamed_to:{dst}')
+    # We can't rely on the parent driver to find the renamed name; the
+    # check_fired closure in setup_outside_file_exists keys on the
+    # ORIGINAL path being gone, which os.rename satisfies if it
+    # succeeds. Cleanup will leak the .renamed file; ignore (small,
+    # bounded by num test runs).
+except Exception as e:
+    print(f'BLOCKED:{type(e).__name__}')
+""",
+    },
+    {
+        "id": "spawn_disallowed_via_shell",
+        "desc": "/bin/sh spawns /usr/bin/curl (curl not in default allowed-exec set)",
+        "setup": setup_none,
+        "attack": r"""
+import subprocess
+try:
+    r = subprocess.run(
+        ['/bin/sh', '-c', '/usr/bin/curl --max-time 1 --silent --output /dev/null http://example.com'],
+        capture_output=True, text=True, timeout=5,
+    )
+    if r.returncode == 0:
+        print('FIRED:curl_succeeded_via_shell')
+    else:
+        print(f'BLOCKED:exit={r.returncode}:{(r.stderr or "")[:80]!r}')
+except Exception as e:
+    print(f'BLOCKED:{type(e).__name__}')
+""",
+    },
 ]
 
 
