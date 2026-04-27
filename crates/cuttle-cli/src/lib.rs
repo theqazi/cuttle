@@ -21,12 +21,13 @@
 //! supply-chain-tax-for-nothing trade-off CLAUDE.md §0e flags.
 
 pub mod args;
+pub mod ask_cmd;
 pub mod paths;
 pub mod telemetry_cmd;
 
 use std::io::Write;
 
-pub use args::{Cli, Command, ParseError, TelemetryArgs};
+pub use args::{AskArgs, Cli, Command, ParseError, PromptSource, TelemetryArgs};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CliError {
@@ -35,17 +36,16 @@ pub enum CliError {
 
     #[error("telemetry subcommand failed: {0}")]
     Telemetry(#[from] telemetry_cmd::TelemetryCmdError),
+
+    #[error("ask subcommand failed: {0}")]
+    Ask(#[from] ask_cmd::AskCmdError),
 }
 
 /// CLI entry point. `argv` should INCLUDE the program name as `argv[0]`,
 /// matching `std::env::args()`. Writes user-facing output to `stdout`
 /// and diagnostics to `stderr`. Returns the process exit code: 0 on
 /// success, 1 on usage error, 2 on subcommand failure.
-pub fn run<W: Write, E: Write>(
-    argv: &[String],
-    stdout: &mut W,
-    stderr: &mut E,
-) -> i32 {
+pub fn run<W: Write, E: Write>(argv: &[String], stdout: &mut W, stderr: &mut E) -> i32 {
     let cli = match Cli::parse(argv) {
         Ok(c) => c,
         Err(ParseError::HelpRequested) => {
@@ -68,6 +68,13 @@ pub fn run<W: Write, E: Write>(
             Ok(()) => 0,
             Err(e) => {
                 let _ = writeln!(stderr, "cuttle telemetry: {e}");
+                2
+            }
+        },
+        Command::Ask(args) => match ask_cmd::run(&args, stdout) {
+            Ok(()) => 0,
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle ask: {e}");
                 2
             }
         },

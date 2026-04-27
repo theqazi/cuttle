@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-cli"
-version = "0.0.11"
+version = "0.0.12"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle top-level CLI binary. v0.0.11 wires the cuttle telemetry subcommand. Interactive REPL + cuttle config init deferred to v0.0.12+ once cuttle-anthropic streaming lands."
+description = "Cuttle top-level CLI binary. v0.0.12 adds cuttle ask: single-turn streaming Claude call. cuttle session start (multi-turn REPL with audit chain integration) lands in v0.0.13."
 
 [[bin]]
 name = "cuttle"
@@ -17,8 +17,12 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 dirs.workspace = true
+tokio.workspace = true
+futures-util.workspace = true
 cuttle-audit = { path = "../cuttle-audit" }
 cuttle-telemetry = { path = "../cuttle-telemetry" }
+cuttle-credential = { path = "../cuttle-credential" }
+cuttle-anthropic = { path = "../cuttle-anthropic" }
 
 [dev-dependencies]
 tempfile.workspace = true
