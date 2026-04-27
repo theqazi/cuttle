@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.11 (session 5 closes path #1: ALL 12 of 12 v0.1 crates landed; 173/173 tests; cuttle binary builds + runs end-to-end; 2026-04-26)
+**Version**: handoff-0.12 (session 5 mid: streaming SSE + cuttle ask landed; 204/204 tests; first daily-driver-shape command works end-to-end with ANTHROPIC_API_KEY; 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -19,6 +19,29 @@ sharpened pitch: the framework, finally able to enforce _in front of_ execution
 instead of _behind_ it, because the substrate is no longer the bottleneck. v0.1 is
 single-operator, CLI-only, Anthropic-API-key-only (ToS-clean), and ships as an
 implementation existence proof, not an effect claim.
+
+## Mid-session 5 update (handoff-0.12)
+
+**Headline**: streaming + first daily-driver-shape command works.
+`cuttle ask "anything"` with `ANTHROPIC_API_KEY` exported now produces a
+streaming Claude response. 204/204 tests pass; clippy clean.
+
+Commits added since handoff-0.11:
+
+- `b5e51c5` cuttle-anthropic v0.0.9: SSE streaming via eventsource-stream;
+  StreamEvent enum (8 variants + Unknown forward-compat); messages_stream()
+  with first-byte-aware retry safety; PartialStream error variant.
+- `ad223e4` cuttle-credential v0.0.2: ApiKey::from_env_var with footgun
+  rejection (NotSet / Empty / NonUtf8 / SurroundingWhitespace).
+- `5e6c440` cuttle-cli v0.0.12: cuttle ask command. Hand-rolled argv parser
+  extended for the new subcommand; --model / --max-tokens / --api-key-env /
+  --stdin flags; positional prompt with multi-token concatenation; tokio
+  runtime built on demand; streaming output flushed after each delta so
+  the operator sees real-time text.
+
+Smoke verified by invoking the actual binary (no API key needed for error
+paths): missing-prompt error names exact next action; invalid --max-tokens
+names the offending option + value; missing API key names the env var.
 
 ## State at end of session 5 (2026-04-26)
 
