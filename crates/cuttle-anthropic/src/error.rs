@@ -45,6 +45,14 @@ pub enum AnthropicError {
         attempts: u32,
         last: Box<AnthropicError>,
     },
+
+    /// Mid-stream failure during `messages_stream()`. NEVER retryable at
+    /// the client level: replaying the request would double-bill output
+    /// tokens (SSE replay trap per `retry.rs` module doc). Caller
+    /// decides whether to surface partial output to the operator or
+    /// discard.
+    #[error("streaming response interrupted: {reason}")]
+    PartialStream { reason: String },
 }
 
 impl AnthropicError {
@@ -64,7 +72,8 @@ impl AnthropicError {
             }
             AnthropicError::Deserialize(_)
             | AnthropicError::InvalidRequest(_)
-            | AnthropicError::RetryExhausted { .. } => false,
+            | AnthropicError::RetryExhausted { .. }
+            | AnthropicError::PartialStream { .. } => false,
         }
     }
 }

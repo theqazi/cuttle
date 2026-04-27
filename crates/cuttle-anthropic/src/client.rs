@@ -18,7 +18,9 @@
 use crate::error::AnthropicError;
 use crate::model::{Request, Response};
 use crate::retry::{RetryDecision, RetryPolicy};
+use crate::stream::{StreamEvent, parse_response_stream};
 use cuttle_credential::ApiKey;
+use futures_util::stream::Stream;
 use std::time::Duration;
 
 /// Anthropic API version pinned at the wire level. Updating this is a
@@ -125,6 +127,103 @@ impl AnthropicClient {
                 }
             }
         }
+    }
+
+    /// POST `/v1/messages` with `stream: true` and return a Stream of
+    /// parsed `StreamEvent` items. The connection-establish phase IS
+    /// retryable (handled here by the same RetryPolicy as `messages()`);
+    /// once we hand a stream back, retry stops being safe — replaying
+    /// would double-bill output tokens. Mid-stream failures surface as
+    /// `Err(AnthropicError::PartialStream { ... })` items and the
+    /// caller decides what to do.
+    ///
+    /// The `request.stream` field is force-set to `Some(true)` here so
+    /// callers don't have to remember; non-streaming `messages()`
+    /// likewise force-clears it.
+    pub async fn messages_stream(
+        &self,
+        api_key: &ApiKey,
+        request: &Request,
+    ) -> Result<impl Stream<Item = Result<StreamEvent, AnthropicError>>, AnthropicError>
+    {
+        let key_bytes = api_key.consume();
+        let key_header_value = std::str::from_utf8(key_bytes).map_err(|_| {
+            AnthropicError::InvalidRequest(
+                "API key is not valid UTF-8; refusing to format header".into(),
+            )
+        })?;
+
+        let url = format!("{}/v1/messages", self.config.base_url);
+        let mut streaming_request = request.clone();
+        streaming_request.stream = Some(true);
+        let body_bytes = serde_json::to_vec(&streaming_request)?;
+
+        let mut attempt: u32 = 0;
+        let resp = loop {
+            attempt += 1;
+            match self
+                .send_once_raw(&url, key_header_value, body_bytes.clone())
+                .await
+            {
+                Ok(r) => break r,
+                Err(err) => {
+                    let hint = retry_after_hint_from(&err);
+                    match self.config.retry.decide(attempt, &err, hint) {
+                        RetryDecision::GiveUp => {
+                            if err.is_retryable() {
+                                return Err(AnthropicError::RetryExhausted {
+                                    attempts: attempt,
+                                    last: Box::new(err),
+                                });
+                            }
+                            return Err(err);
+                        }
+                        RetryDecision::AfterMillis(ms) => {
+                            tokio::time::sleep(Duration::from_millis(ms)).await;
+                        }
+                    }
+                }
+            }
+        };
+
+        Ok(parse_response_stream(resp))
+    }
+
+    /// Like `send_once` but returns the raw reqwest::Response on success
+    /// so the caller can pipe its body bytes into the SSE parser.
+    /// Non-2xx + Retry-After handling is identical.
+    async fn send_once_raw(
+        &self,
+        url: &str,
+        api_key_header: &str,
+        body: Vec<u8>,
+    ) -> Result<reqwest::Response, AnthropicError> {
+        let resp = self
+            .http
+            .post(url)
+            .header("x-api-key", api_key_header)
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .header("content-type", "application/json")
+            .header("accept", "text/event-stream")
+            .body(body)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(resp);
+        }
+
+        let retry_after_ms = parse_retry_after_header(&resp);
+        let body_text = resp.text().await.unwrap_or_default();
+        let body_with_hint = match retry_after_ms {
+            Some(ms) => format!("__retry_after_ms__={ms}\n{body_text}"),
+            None => body_text,
+        };
+        Err(AnthropicError::RequestFailed {
+            status: status.as_u16(),
+            body: body_with_hint,
+        })
     }
 
     /// One HTTPS POST attempt. Maps reqwest errors + non-2xx statuses into

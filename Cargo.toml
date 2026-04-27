@@ -44,6 +44,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util
 futures-util = "0.3"
 bytes = "1"
 url = "2"
+eventsource-stream = "0.2"
 
 [profile.release]
 panic = "abort"

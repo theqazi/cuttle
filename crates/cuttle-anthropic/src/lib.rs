@@ -29,10 +29,13 @@ pub mod client;
 pub mod error;
 pub mod model;
 pub mod retry;
+pub mod stream;
 
 pub use client::{AnthropicClient, ClientConfig};
 pub use error::AnthropicError;
-pub use model::{
-    Content, Message, Model, Request, Response, Role, StopReason, Usage,
-};
+pub use model::{Content, Message, Model, Request, Response, Role, StopReason, Usage};
 pub use retry::{RetryDecision, RetryPolicy};
+pub use stream::{
+    ContentBlockDelta, ContentBlockStartPayload, ErrorPayload, MessageDeltaPayload,
+    MessageStartPayload, StreamEvent, parse_response_stream,
+};
