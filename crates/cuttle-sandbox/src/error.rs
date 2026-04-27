@@ -55,6 +55,16 @@ pub enum SandboxError {
         stdout: Vec<u8>,
         stderr: Vec<u8>,
     },
+
+    /// `project_root` could not be canonicalized via `realpath(3)`.
+    /// Either the path does not exist, a parent has no execute
+    /// permission, or there is an I/O error stat'ing the chain. Fail
+    /// closed: you cannot sandbox-protect a directory we cannot resolve.
+    #[error("could not canonicalize project_root {path:?}: {source}")]
+    ProjectRootCanonicalize {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
 #[cfg(test)]

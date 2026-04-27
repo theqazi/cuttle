@@ -40,6 +40,11 @@ pub fn default_allowed_binaries() -> Vec<PathBuf> {
         "/usr/bin/grep",
         "/usr/bin/head",
         "/usr/bin/python3",
+        // The single /usr/bin/python3 stub above is the entry point.
+        // The render_sbpl() side ALSO emits subpath rules for the
+        // Python framework dirs so the 4-binary re-exec chain
+        // (stub -> CLT symlink -> versioned -> .app/Contents/MacOS/Python)
+        // works without enumerating each binary.
         "/usr/bin/sed",
         "/usr/bin/sort",
         "/usr/bin/tail",
@@ -71,10 +76,28 @@ impl SandboxProfile {
     /// Construct with default rlimits + default allowed-binaries set.
     /// Validates the project root is absolute + SBPL-safe; returns
     /// `SandboxError` on either failure.
+    ///
+    /// Canonicalizes the project_root before storing: macOS `/tmp` is a
+    /// symlink to `/private/tmp` and SBPL `(subpath ...)` does not
+    /// follow symlinks, so a sandboxed program's `getcwd()` would fail
+    /// the file-read check if we kept the symlink form. Canonicalizing
+    /// also requires the path to EXIST, which is the right contract:
+    /// you can't sandbox-protect a directory that isn't there.
     pub fn for_project(project_root: PathBuf) -> Result<Self, SandboxError> {
         validate_path_for_sbpl(&project_root)?;
+        let canonical =
+            project_root
+                .canonicalize()
+                .map_err(|e| SandboxError::ProjectRootCanonicalize {
+                    path: project_root.clone(),
+                    source: e,
+                })?;
+        // The canonical form must also be SBPL-safe. realpath(3) can in
+        // theory produce paths with characters that need escaping; check
+        // again so we never silently widen the SBPL via canonicalization.
+        validate_path_for_sbpl(&canonical)?;
         Ok(SandboxProfile {
-            project_root,
+            project_root: canonical,
             allowed_subprocess_paths: default_allowed_binaries(),
             cpu_limit_secs: 60,
             mem_limit_mb: 1024,
@@ -138,6 +161,8 @@ impl SandboxProfile {
              \x20   (subpath \"/Library\")\n\
              \x20   (subpath \"/private/etc\")\n\
              \x20   (subpath \"/private/var\")\n\
+             \x20   (subpath \"/var\")\n\
+             \x20   (subpath \"/etc\")\n\
              \x20   (literal \"/\")\n\
              \x20   (literal \"/dev/null\")\n\
              \x20   (literal \"/dev/random\")\n\
@@ -150,7 +175,13 @@ impl SandboxProfile {
              (allow file-write-data\n\
              \x20   (literal \"/dev/stdout\")\n\
              \x20   (literal \"/dev/stderr\"))\n\
-             (allow process-exec\n{allowed_execs})\n\
+             (allow process-exec\n{allowed_execs}\
+             \x20   (subpath \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework\")\n\
+             \x20   (subpath \"/Library/Developer/CommandLineTools/usr/bin\")\n\
+             \x20   (subpath \"/opt/homebrew/Cellar\")\n\
+             \x20   (subpath \"/opt/homebrew/opt\")\n\
+             \x20   (subpath \"/usr/local/Cellar\")\n\
+             \x20   (subpath \"/usr/local/opt\"))\n\
              (deny network*)\n\
              (allow network* (remote ip \"localhost:*\"))\n\
              (allow sysctl-read)\n\
@@ -199,6 +230,18 @@ fn is_sbpl_unsafe(ch: char) -> bool {
 mod tests {
     use super::*;
 
+    /// Tempdir-based fixture. Returns a (TempDir, canonical_path) pair so
+    /// the dir lives until the test scope ends. Most tests need a real
+    /// existing path now that for_project canonicalizes (canonicalize
+    /// requires the path to exist). We pre-canonicalize the expected path
+    /// so equality checks against project_root() match the canonical form
+    /// SandboxProfile stores.
+    fn fixture() -> (tempfile::TempDir, PathBuf) {
+        let td = tempfile::tempdir().expect("tempdir");
+        let canonical = td.path().canonicalize().expect("canonicalize tempdir");
+        (td, canonical)
+    }
+
     #[test]
     fn for_project_rejects_relative_path() {
         let r = SandboxProfile::for_project(PathBuf::from("relative/foo"));
@@ -237,15 +280,28 @@ mod tests {
 
     #[test]
     fn for_project_accepts_typical_unix_path() {
-        let p = SandboxProfile::for_project(PathBuf::from("/Users/m0/code/cuttle"))
-            .expect("typical path should validate");
-        assert_eq!(p.project_root(), Path::new("/Users/m0/code/cuttle"));
+        let (_td, root) = fixture();
+        let p = SandboxProfile::for_project(root.clone()).expect("typical path should validate");
+        assert_eq!(p.project_root(), root);
         assert!(!p.allowed_subprocess_paths().is_empty());
     }
 
     #[test]
+    fn for_project_errors_when_path_does_not_exist() {
+        // Regression for the canonicalize() semantics: a non-existent
+        // path can no longer be sandbox-protected. Operator gets a
+        // specific error rather than a runtime sandbox-exec failure.
+        let r = SandboxProfile::for_project(PathBuf::from("/nonexistent/cuttle/scratch"));
+        assert!(
+            matches!(r, Err(SandboxError::ProjectRootCanonicalize { .. })),
+            "expected ProjectRootCanonicalize, got {r:?}"
+        );
+    }
+
+    #[test]
     fn rendered_sbpl_starts_with_version_and_deny_default() {
-        let p = SandboxProfile::for_project(PathBuf::from("/tmp/proj")).unwrap();
+        let (_td, root) = fixture();
+        let p = SandboxProfile::for_project(root).unwrap();
         let s = p.render_sbpl();
         assert!(s.starts_with("(version 1)"), "{s}");
         assert!(s.contains("(deny default)"));
@@ -254,9 +310,11 @@ mod tests {
 
     #[test]
     fn rendered_sbpl_includes_project_root_in_read_and_write_subpaths() {
-        let p = SandboxProfile::for_project(PathBuf::from("/Users/m0/code/cuttle")).unwrap();
+        let (_td, root) = fixture();
+        let p = SandboxProfile::for_project(root.clone()).unwrap();
         let s = p.render_sbpl();
-        assert!(s.contains("(subpath \"/Users/m0/code/cuttle\")"));
+        let expected = format!("(subpath \"{}\")", root.display());
+        assert!(s.contains(&expected), "missing {expected:?} in {s}");
         // Project root must appear under both file-read* and file-write*.
         let read_section_idx = s.find("(allow file-read*").unwrap();
         let write_section_idx = s.find("(allow file-write*").unwrap();
@@ -265,7 +323,8 @@ mod tests {
 
     #[test]
     fn rendered_sbpl_lists_allowed_binaries_as_literals() {
-        let p = SandboxProfile::for_project(PathBuf::from("/tmp/proj")).unwrap();
+        let (_td, root) = fixture();
+        let p = SandboxProfile::for_project(root).unwrap();
         let s = p.render_sbpl();
         assert!(s.contains("(literal \"/bin/bash\")"));
         assert!(s.contains("(literal \"/usr/bin/git\")"));
@@ -273,7 +332,8 @@ mod tests {
 
     #[test]
     fn rendered_sbpl_allows_localhost_loopback_only() {
-        let p = SandboxProfile::for_project(PathBuf::from("/tmp/proj")).unwrap();
+        let (_td, root) = fixture();
+        let p = SandboxProfile::for_project(root).unwrap();
         let s = p.render_sbpl();
         // Modern SBPL accepts only "localhost" or "*" as the host literal;
         // IP literals like "127.0.0.1" are rejected at parse time.
@@ -285,7 +345,8 @@ mod tests {
 
     #[test]
     fn with_allowed_binaries_validates_each_path() {
-        let p = SandboxProfile::for_project(PathBuf::from("/tmp/proj")).unwrap();
+        let (_td, root) = fixture();
+        let p = SandboxProfile::for_project(root).unwrap();
         let r = p.with_allowed_binaries(vec![
             PathBuf::from("/bin/safe"),
             PathBuf::from("/bin/un\"safe"),
@@ -295,7 +356,8 @@ mod tests {
 
     #[test]
     fn with_allowed_binaries_replaces_set() {
-        let p = SandboxProfile::for_project(PathBuf::from("/tmp/proj"))
+        let (_td, root) = fixture();
+        let p = SandboxProfile::for_project(root)
             .unwrap()
             .with_allowed_binaries(vec![PathBuf::from("/bin/only")])
             .unwrap();
@@ -307,7 +369,8 @@ mod tests {
 
     #[test]
     fn default_rlimits_are_recorded() {
-        let p = SandboxProfile::for_project(PathBuf::from("/tmp/proj")).unwrap();
+        let (_td, root) = fixture();
+        let p = SandboxProfile::for_project(root).unwrap();
         assert_eq!(p.cpu_limit_secs, 60);
         assert_eq!(p.mem_limit_mb, 1024);
         assert_eq!(p.max_open_fds, 256);

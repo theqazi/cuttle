@@ -112,15 +112,20 @@ mod tests {
 
     #[test]
     fn run_profile_renders_sbpl_for_explicit_project_root() {
+        // Use a real tempdir; SandboxProfile::for_project canonicalizes
+        // and requires the path to exist (cuttle-sandbox v0.0.10).
+        let td = tempfile::tempdir().unwrap();
+        let canonical = td.path().canonicalize().unwrap();
         let args = SandboxProfileArgs {
-            project_root: Some(PathBuf::from("/tmp/example-project")),
+            project_root: Some(canonical.clone()),
         };
         let mut out = Vec::new();
         run_profile(&args, &mut out).unwrap();
         let s = String::from_utf8(out).unwrap();
         assert!(s.starts_with("(version 1)"), "{s}");
         assert!(s.contains("(deny default)"));
-        assert!(s.contains("(subpath \"/tmp/example-project\")"));
+        let expected = format!("(subpath \"{}\")", canonical.display());
+        assert!(s.contains(&expected), "missing {expected:?} in {s}");
     }
 
     #[test]
