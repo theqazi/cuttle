@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-sandbox"
-version = "0.0.11"
+version = "0.0.12"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle macOS sandbox primitive. Generates SBPL profiles + invokes the standard macOS sandbox binary per TDD §4 + D-2026-04-26-26. v0.0.9 ships profile generation + sync spawn; rlimit enforcement deferred to v0.0.10 (warrants its own threat-model pass before unsafe libc surface lands). v0.0.11 narrows file-read* scope: replace the broad (subpath /var) and (subpath /private/var) rules with the specific paths dyld + xcode-select + tzdata actually need, so /var/folders/<user>/T/ is no longer readable from inside the sandbox. Validated by bench/harness_suite.py going 4/5 -> 5/5 contained."
+description = "Cuttle macOS sandbox primitive. Generates SBPL profiles + invokes the standard macOS sandbox binary per TDD §4 + D-2026-04-26-26. v0.0.9 ships profile generation + sync spawn; rlimit enforcement deferred to v0.0.10. v0.0.11 narrowed (subpath /var) to specific paths but broke /usr/bin/python3 startup: xcode-select couldn't resolve /var/select/developer_dir, masking 5/5 'contained' results as silent Python-failed-to-launch (false BLOCKED). v0.0.12 reverts /var to broad subpath-allow but adds an explicit (deny file-read* (subpath /var/folders)) + a re-allow on the project_root subpath so /var/folders/<user>/T/ stays denied while project_root reads still work. Validated by bench/harness_suite.py going 8/8 contained against an expanded exploit set (mkdir, unlink, list_users_dir, plus the original 5)."
 
 [dependencies]
 serde.workspace = true
