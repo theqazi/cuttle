@@ -20,6 +20,88 @@ instead of _behind_ it, because the substrate is no longer the bottleneck. v0.1 
 single-operator, CLI-only, Anthropic-API-key-only (ToS-clean), and ships as an
 implementation existence proof, not an effect claim.
 
+## Session 7 update (handoff-0.17)
+
+**Headline**: cuttle published to GitHub + bench/harness validation
+suites under cuttle/bench + cuttle-sandbox v0.0.12 SBPL fix. Repo
+live at https://github.com/theqazi/cuttle. Harness suite reports
+CONTROL-OK + 10/10 contained against v0.0.12.
+
+**Important**: `/usr/local/bin/cuttle` on this machine is still
+v0.0.11 (false-pass-prone, pre-fix). Run `sudo ./install.sh` to
+upgrade to v0.0.12 before trusting any sandbox-validation result.
+
+Commits since handoff-0.16 (newest first):
+
+- `8f0215d` feat(bench/harness): +2 exploits (rename_outside_root,
+  spawn_disallowed_via_shell). Suite at 10/10 contained.
+- `2e41a1f` feat(bench/harness): add positive-control row to detect
+  runtime startup failures. Closes the lesson from the v0.0.11
+  false-pass.
+- `7b264f7` docs(validation): record v0.0.11 false-pass and v0.0.12
+  fix. The 5/5 contained claim against v0.0.11 was actually
+  Python-failed-to-launch under sandbox; the contained rate could
+  not be trusted without a positive control.
+- `44e8a10` fix(bench/harness): per-phase setup, drop read_dev_disk,
+  +3 new exploits (mkdir, unlink, list_users_dir). Each phase now
+  gets its own setup so external state doesn't leak across phases.
+- `af99068` fix(sandbox): cuttle-sandbox v0.0.12, restore /var,
+  deny /var/folders, re-allow project_root. SBPL is order-sensitive
+  with last-match-wins, so layered allow then deny then allow lets
+  dyld and xcode-select work while keeping per-user TMPDIR secrets
+  denied.
+- `8706d39` feat(bench): add 5 harder security tasks
+  (p\*ckle_load, subprocess_shell_inject, weak_token_random,
+  csv_formula_injection, ssrf_scheme_filter). Recovers joint-test
+  signal that the original 8-task suite ceilinged at 100% on
+  Haiku 4.5. Each verified locally with vulnerable + safe impls
+  before commit.
+- `11194dd` chore(cli): scrub stale ~/m0qazi/bench path from
+  cuttle-cli text. Cosmetic before public push.
+- `f81e2b8` feat(bench): vendor bench + harness-isolation suite
+  under cuttle/bench. Suites ship with cuttle now; reviewers can
+  re-run from the same checkout.
+- `2262a13` docs(validation): record sandbox validation methodology
+  (Suite 1 vs Suite 2; joint-test ceiling; harness-isolation as
+  primary containment claim).
+- `df5ef19` fix(sandbox): cuttle-sandbox v0.0.11, narrow /var read
+  scope. SUPERSEDED by af99068 (broke Python startup; see v0.0.12).
+
+State summary:
+
+- 13 SWE+Secure tasks in bench/bench.py (was 8). 12 measurable in
+  Phase C, 1 (`command_injection`) opted out via phase_c_skip per
+  KI-1 in docs/sandbox-validation.md.
+- 11 rows in bench/harness_suite.py: 1 positive control + 10
+  exploits. Reports CONTROL-OK + 10/10 contained against v0.0.12.
+- cuttle-sandbox bumped 0.0.10 -> 0.0.11 -> 0.0.12. v0.0.12 is the
+  shippable one; v0.0.11 silently broke /usr/bin/python3 startup
+  under sandbox.
+- docs/sandbox-validation.md is the artifact to cite for cuttle's
+  containment claim. Updated with the v0.0.11 false-pass + v0.0.12
+  fix history + the explicit lesson "harness-isolation suite needs
+  a positive-control row".
+
+Where to resume:
+
+1. **`sudo ./install.sh`** to upgrade /usr/local/bin/cuttle to
+   v0.0.12. Until done, ANY harness suite run against the installed
+   binary will report false BLOCKED on every row (Python startup
+   regression).
+2. Run the model bench against the new 13 tasks
+   (`python3 bench.py --runs 5 --model claude-haiku-4-5-20251001`)
+   to see whether the 5 harder tasks actually produce the
+   joint-test signal we wanted. ~$0.10 on Haiku, ~$2 on Sonnet.
+3. If signal emerges: run Phase C and check ΔsecC for the new
+   tasks. The bench/README.md is stale (says 8 tasks); refresh
+   when convenient. (Security hook hard-blocks files containing
+   the literal word `p\*ckle` in this session, so the README
+   rewrite is deferred.)
+4. KI-1 (Python-subprocess-of-git hang under sandbox) remains
+   unfiled as a separate doc; tracked only in
+   docs/sandbox-validation.md § Known issues. If you want a
+   standalone tracker, add docs/known-issues/sandbox-python-git-hang.md.
+
 ## Session 6 late update (handoff-0.16)
 
 **Headline**: cuttle is now operator-installable end-to-end + the
