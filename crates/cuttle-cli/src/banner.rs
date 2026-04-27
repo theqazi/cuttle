@@ -1,29 +1,40 @@
-//! ASCII banner for `cuttle session start`. Shown once at REPL launch
-//! so the operator knows which tool is on the other side of stdin.
+//! Banner for `cuttle session start`. Shown once at REPL launch.
 //!
-//! Cuttle's codename theme is aquatic animals; the banner is a stylized
-//! cuttlefish silhouette with the version + the load-bearing security
-//! posture sentence under it. Kept short so it doesn't dominate the
-//! terminal at session start.
+//! Design history (kept short for future-Mo who wonders why this is text):
+//! - v0.0.15: literal cuttlefish silhouette. Looked like a deformed face.
+//! - v0.0.16-a: Unicode quadrant wordmark. Linter shifted top-row spacing
+//!   and the letters fell out of column alignment.
+//! - v0.0.16-b: full-block wordmark. Aligned, but the 1-px-thick strokes
+//!   read as spindly + the 1-space letter gaps made the letters merge.
+//! - v0.0.16-c (this version): killed the wordmark. Rounded box draw
+//!   with title in the top border, the way `gh`, `kubectl`, etc. do
+//!   their startup splash. Clean, reliable, no glyph-alignment risk.
+//!
+//! No emojis (per CLAUDE.md). No em-dashes (per CLAUDE.md §7d.1).
 
-/// Render the banner with the live binary version. Returns a `String`
-/// so the caller decides where it goes (stdout for sessions, captured
-/// in tests).
+/// Render the banner with the live binary version.
 pub fn render() -> String {
     let version = env!("CARGO_PKG_VERSION");
-    // 7 lines of art + 2 of metadata. The cuttlefish is intentionally
-    // small enough to fit in an 80-column terminal without wrapping.
-    format!(
-        r#"
-        .--.       .--.
-       (    `-._.-'    )      cuttle {version}
-        \    (o)(o)   /       security-first BYOK Claude harness
-         \  ( <  > )  /       deterministic gate, HMAC-chained audit,
-          \  '----'  /        zeroize-on-drop credentials
-           '-.____.-'
-            )))    (((        type /quit or Ctrl+D to exit.
-"#
-    )
+    // Box width chosen so the longest content line ("deterministic ...
+    // zeroize on drop") fits with 2 spaces of inner padding either side.
+    // 60 chars wide is comfortable in any terminal >= 80 cols.
+    let title = format!(" cuttle {version} ");
+    // Top border: "╭─ cuttle 0.0.16 ──────...─╮"
+    let inner_width: usize = 58;
+    let dashes_after_title = inner_width.saturating_sub(title.chars().count());
+    let top = format!("╭─{title}{}─╮", "─".repeat(dashes_after_title));
+    let bottom = format!("╰{}╯", "─".repeat(inner_width + 2));
+
+    let lines = [
+        "  security-first BYOK Claude harness",
+        "  deterministic gate, HMAC-chained audit, zeroize-on-drop",
+    ];
+    let body: String = lines
+        .iter()
+        .map(|l| format!("│ {l:<inner_width$} │\n", inner_width = inner_width))
+        .collect();
+
+    format!("\n{top}\n{body}{bottom}\n   type /quit or Ctrl+D to exit.\n")
 }
 
 #[cfg(test)]
@@ -53,5 +64,29 @@ mod tests {
                 line.chars().count()
             );
         }
+    }
+
+    #[test]
+    fn box_top_and_bottom_are_same_width() {
+        // If the title-padding math drifts, the rounded corners no
+        // longer line up vertically. Asserting equal widths catches
+        // that the moment it happens.
+        let s = render();
+        let lines: Vec<&str> = s.lines().collect();
+        // First non-empty line is the top border; find the matching
+        // bottom border (the line starting with ╰).
+        let top = lines
+            .iter()
+            .find(|l| l.starts_with("╭"))
+            .expect("missing top border");
+        let bottom = lines
+            .iter()
+            .find(|l| l.starts_with("╰"))
+            .expect("missing bottom border");
+        assert_eq!(
+            top.chars().count(),
+            bottom.chars().count(),
+            "top {top:?} != bottom {bottom:?}"
+        );
     }
 }

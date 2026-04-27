@@ -109,6 +109,14 @@ struct TranscriptEntry<'a> {
 /// returns. Conversation history is dropped on exit (no resume in
 /// v0.0.14; the audit log + transcript are the durable record).
 pub fn run(args: &SessionStartArgs) -> Result<(), SessionCmdError> {
+    // Print the wordmark up front so the operator gets instant visual
+    // feedback (and so the banner is visible even if a subsequent
+    // resolve step fails). Per-session paths print after the directory
+    // is minted, just below.
+    print!("{}", banner::render());
+    use std::io::Write as _;
+    let _ = std::io::stdout().flush();
+
     // Resolve session paths up front so any failure here aborts before
     // we mint a key or open the model client.
     let cuttle_home = paths::cuttle_home().ok_or(SessionCmdError::NoCuttleHome)?;
@@ -155,8 +163,8 @@ pub fn run(args: &SessionStartArgs) -> Result<(), SessionCmdError> {
     let client =
         AnthropicClient::new(ClientConfig::default()).map_err(SessionCmdError::ClientBuild)?;
 
-    // Print the session-start banner so operator knows where files live.
-    print_banner(&session_id, &session_dir);
+    // Print per-session paths (banner already printed above).
+    print_session_paths(&session_id, &session_dir);
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -181,9 +189,7 @@ fn mint_session_id() -> String {
     format!("{stamp}-{suffix:08x}")
 }
 
-fn print_banner(session_id: &str, session_dir: &std::path::Path) {
-    print!("{}", banner::render());
-    println!();
+fn print_session_paths(session_id: &str, session_dir: &std::path::Path) {
     println!("session: {session_id}");
     println!("  audit log:  {}/audit.jsonl", session_dir.display());
     println!("  chain key:  {}/chain.key", session_dir.display());
