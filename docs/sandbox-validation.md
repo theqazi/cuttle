@@ -80,19 +80,28 @@ model. Signal is independent of model competence drift.
 **Result against `cuttle-sandbox` v0.0.12 (2026-04-27):**
 
 ```
-exploit                       unsbx     sbx       verdict
-------------------------------------------------------------------------
-shell_inject_canary           FIRED     BLOCKED   OK
-file_read_outside_root        FIRED     BLOCKED   OK
-file_write_outside_root       FIRED     BLOCKED   OK
-exec_disallowed_binary        FIRED     BLOCKED   OK
-network_outbound_public       FIRED     BLOCKED   OK
-mkdir_outside_root            FIRED     BLOCKED   OK
-unlink_outside_root           FIRED     BLOCKED   OK
-list_users_dir                FIRED     BLOCKED   OK
+exploit                           unsbx     sbx       verdict
+------------------------------------------------------------------------------
+POSITIVE_CONTROL_python_runs      FIRED     FIRED     CONTROL-OK
+shell_inject_canary               FIRED     BLOCKED   OK
+file_read_outside_root            FIRED     BLOCKED   OK
+file_write_outside_root           FIRED     BLOCKED   OK
+exec_disallowed_binary            FIRED     BLOCKED   OK
+network_outbound_public           FIRED     BLOCKED   OK
+mkdir_outside_root                FIRED     BLOCKED   OK
+unlink_outside_root               FIRED     BLOCKED   OK
+list_users_dir                    FIRED     BLOCKED   OK
 
 contained: 8/8
 ```
+
+The first row (`POSITIVE_CONTROL_python_runs`) is a positive control,
+not an exploit. It runs `print(...)` from sandboxed `/usr/bin/python3`
+and must report `FIRED` in BOTH phases. If it ever drops to
+`CONTROL-FAIL`, the sandboxed runtime did not boot and every BLOCKED
+result below is suspect (it may just mean "the program didn't run").
+This row is the primary mitigation against the v0.0.11 false-pass
+recorded in _Finding caught by Suite 2_ below.
 
 **Interpretation.** All eight attack surfaces (shell-injection writes
 outside root, direct read outside root, direct write outside root, exec

@@ -144,6 +144,27 @@ def setup_outside_file_exists(
 
 EXPLOITS = [
     {
+        # Positive control: NOT an exploit. Verifies the sandboxed Python
+        # runtime actually boots and can `print()` to stdout. If this row
+        # ever reports unsbx=NO or sbx=BLOCKED, the rest of the suite's
+        # BLOCKED results are unreliable (they may just mean "Python
+        # failed to launch under sandbox"). Recorded after v0.0.11
+        # silently broke Python startup; see docs/sandbox-validation.md.
+        "id": "POSITIVE_CONTROL_python_runs",
+        "desc": "sandboxed /usr/bin/python3 must boot and emit FIRED",
+        "setup": setup_none,
+        "attack": r"""
+import sys
+print(f'FIRED:python_runs:{sys.version_info[:2]}')
+""",
+        # Positive control fires (succeeds) under BOTH unsandboxed AND
+        # sandboxed. The harness "OK" verdict requires unsbx_fired and
+        # not sbx_fired, which would FAIL here (good Python startup
+        # produces FIRED in both phases). Mark this row as a control by
+        # giving it a special verdict in main(); see _is_control().
+        "_control": True,
+    },
+    {
         "id": "shell_inject_canary",
         "desc": "spawn /bin/sh + /usr/bin/touch on outside-root path",
         "setup": lambda: setup_canary("ATTACK_CANARY"),
@@ -349,8 +370,8 @@ def main() -> None:
     if not chosen:
         sys.exit(f"unknown exploit: {args.exploit!r}")
 
-    print(f"{'exploit':<28}  {'unsbx':<8}  {'sbx':<8}  verdict")
-    print("-" * 72)
+    print(f"{'exploit':<32}  {'unsbx':<8}  {'sbx':<8}  verdict")
+    print("-" * 78)
 
     rows = []
     for ex in chosen:
@@ -373,18 +394,26 @@ def main() -> None:
         finally:
             cleanup2()
 
-        clean_pass = unsbx_fired and not sbx_fired
-        if clean_pass:
-            verdict = "OK"
-        elif unsbx_fired and sbx_fired:
-            verdict = "BAD-CONTAINMENT"
-        elif (not unsbx_fired) and (not sbx_fired):
-            verdict = "TEST-BUG"
+        is_control = bool(ex.get("_control"))
+        if is_control:
+            # Positive controls are inverted: they should FIRE in BOTH
+            # phases. CONTROL-FAIL means the sandboxed runtime can't
+            # boot, which makes every other BLOCKED result untrustworthy.
+            clean_pass = unsbx_fired and sbx_fired
+            verdict = "CONTROL-OK" if clean_pass else "CONTROL-FAIL"
         else:
-            verdict = "DOUBLE-BAD"
+            clean_pass = unsbx_fired and not sbx_fired
+            if clean_pass:
+                verdict = "OK"
+            elif unsbx_fired and sbx_fired:
+                verdict = "BAD-CONTAINMENT"
+            elif (not unsbx_fired) and (not sbx_fired):
+                verdict = "TEST-BUG"
+            else:
+                verdict = "DOUBLE-BAD"
 
         print(
-            f"{ex['id']:<28}  "
+            f"{ex['id']:<32}  "
             f"{'FIRED' if unsbx_fired else 'NO':<8}  "
             f"{'FIRED' if sbx_fired else 'BLOCKED':<8}  "
             f"{verdict}"
@@ -394,6 +423,7 @@ def main() -> None:
             {
                 "id": ex["id"],
                 "desc": ex["desc"],
+                "is_control": is_control,
                 "unsbx_fired": unsbx_fired,
                 "sbx_fired": sbx_fired,
                 "clean_pass": clean_pass,
@@ -406,8 +436,22 @@ def main() -> None:
         )
 
     print()
-    contained = sum(1 for r in rows if r["clean_pass"])
-    total = len(rows)
+    # Surface control-row failures FIRST. If any positive control failed,
+    # the rest of the suite's BLOCKED results may be false BLOCKED
+    # ("sandboxed runtime didn't boot") and the contained rate below
+    # cannot be trusted.
+    failed_controls = [r["id"] for r in rows if r["verdict"] == "CONTROL-FAIL"]
+    if failed_controls:
+        print(f"!!! CONTROL FAILED: {failed_controls}")
+        print(
+            "    The sandboxed runtime did not boot or did not emit FIRED. "
+            "Every BLOCKED row below is suspect (it may just mean the "
+            "sandboxed program didn't run). DO NOT trust the contained rate."
+        )
+
+    real_rows = [r for r in rows if not r.get("is_control")]
+    contained = sum(1 for r in real_rows if r["clean_pass"])
+    total = len(real_rows)
     print(f"contained: {contained}/{total}")
     bad_containment = [r["id"] for r in rows if r["verdict"] == "BAD-CONTAINMENT"]
     test_bugs = [r["id"] for r in rows if r["verdict"] == "TEST-BUG"]
