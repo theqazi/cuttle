@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.15 (session 6: cuttle session start REPL works end-to-end; 248/248 tests; per-session HMAC-chained audit + 0600 transcript layout; provenance-without-content separation working as designed; 2026-04-26)
+**Version**: handoff-0.16 (session 6 late: README + install/uninstall + session-REPL panic fix + cuttle sandbox profile/run + ASCII banner; 258/258 tests; cuttle is now operator-installable + auditable end-to-end; 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -19,6 +19,41 @@ sharpened pitch: the framework, finally able to enforce _in front of_ execution
 instead of _behind_ it, because the substrate is no longer the bottleneck. v0.1 is
 single-operator, CLI-only, Anthropic-API-key-only (ToS-clean), and ships as an
 implementation existence proof, not an effect claim.
+
+## Session 6 late update (handoff-0.16)
+
+**Headline**: cuttle is now operator-installable end-to-end + the
+sandbox is auditable from the CLI. 258/258 tests; clippy clean.
+
+Commits since handoff-0.15:
+
+- `c27cf25` README.md + install.sh: operator onramp.
+- `0dcc6d0` install.sh pre-flight writability check + post-install
+  PATH guidance + uninstall.sh (preserves session data by default;
+  `--remove-data` for full wipe).
+- `6cadb66` install.sh refinement (caught the failure mode Mo hit).
+- `1df510b` cuttle-credential v0.0.3: removed the read-once panic
+  that crashed `cuttle session start` on turn 2. ZeroizeOnDrop
+  remains the security boundary. Regression test added.
+- `59bf706` cuttle-cli v0.0.15: `cuttle sandbox profile` (prints SBPL)
+  - `cuttle sandbox run PROGRAM ARGS...` (executes under the sandbox)
+  - ASCII cuttlefish banner at session start.
+
+Operator surface now lives at:
+`cuttle --version | --help`
+`cuttle telemetry [--json] [--falsifier-eval] [--audit-log P]`
+`cuttle ask <PROMPT>`
+`cuttle audit verify --audit-log P --chain-key-file K`
+`cuttle session start [--model M] [--max-tokens N] [--system S]`
+`cuttle sandbox profile [--project-root P]`
+`cuttle sandbox run [--project-root P] PROGRAM [ARGS...]`
+
+Validated pattern saved to memory
+(`feedback_expose_primitives_to_operator_first.md`): ship the
+`cuttle <primitive>` operator surface BEFORE the model-loop wire-in
+so each security boundary is auditable in isolation. This is now
+the default shipping order for v0.0.16+ work (rlimits, Keychain
+backend, tool dispatch).
 
 ## Session 6 update (handoff-0.15)
 
