@@ -158,16 +158,19 @@ dependencies = [
 
 [[package]]
 name = "cuttle-cli"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
+ "chrono",
  "cuttle-anthropic",
  "cuttle-audit",
  "cuttle-credential",
  "cuttle-telemetry",
  "dirs",
  "futures-util",
+ "rand",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror",
  "tokio",

@@ -1,11 +1,13 @@
 //! Hand-rolled argv parser for `cuttle`.
 //!
-//! Grammar v0.0.13:
+//! Grammar v0.0.14:
 //!   cuttle [--help|-h] [--version|-V]
 //!   cuttle telemetry [--json] [--falsifier-eval] [--audit-log <PATH>]
 //!   cuttle ask [--model <MODEL>] [--max-tokens <N>]
 //!              [--api-key-env <VAR>] [--stdin] [<PROMPT>]
 //!   cuttle audit verify --audit-log <PATH> --chain-key-file <PATH>
+//!   cuttle session start [--model <MODEL>] [--max-tokens <N>]
+//!                         [--api-key-env <VAR>] [--system <SYSTEM>]
 //!
 //! Trade-off vs `clap`: this file is now ~280 lines (with tests). Still
 //! zero supply-chain attack surface beyond `std`. clap will be worth
@@ -29,6 +31,7 @@ SUBCOMMANDS:
     telemetry        Show local aggregate signal from the audit log
     ask              Send a single prompt to Claude (streaming response)
     audit verify     Verify an audit log's HMAC chain integrity
+    session start    Start an interactive multi-turn REPL with audit chain
 
 Run `cuttle <subcommand> --help` for subcommand-specific help.
 
@@ -50,6 +53,13 @@ AUDIT VERIFY OPTIONS:
     --audit-log <PATH>          Audit log file to verify (required)
     --chain-key-file <PATH>     File containing the 32-byte session chain key
                                 (raw 32 bytes OR 64 hex chars; required)
+
+SESSION START OPTIONS:
+    --model <MODEL>             Model id (default: claude-sonnet-4-6)
+    --max-tokens <N>            Maximum output tokens per turn (default: 4096)
+    --api-key-env <VAR>         Environment variable holding the API key
+                                (default: ANTHROPIC_API_KEY)
+    --system <SYSTEM>           System prompt applied to every turn (optional)
 ";
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -80,6 +90,10 @@ pub enum ParseError {
     MissingAuditSubcommand,
     #[error("unknown audit subcommand: {0}")]
     UnknownAuditSubcommand(String),
+    #[error("missing session subcommand; expected `start`")]
+    MissingSessionSubcommand,
+    #[error("unknown session subcommand: {0}")]
+    UnknownSessionSubcommand(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -92,12 +106,32 @@ pub enum Command {
     Telemetry(TelemetryArgs),
     Ask(AskArgs),
     AuditVerify(AuditVerifyArgs),
+    SessionStart(SessionStartArgs),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct AuditVerifyArgs {
     pub audit_log: PathBuf,
     pub chain_key_file: PathBuf,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct SessionStartArgs {
+    pub model: String,
+    pub max_tokens: u32,
+    pub api_key_env: String,
+    pub system: Option<String>,
+}
+
+impl Default for SessionStartArgs {
+    fn default() -> Self {
+        SessionStartArgs {
+            model: "claude-sonnet-4-6".to_string(),
+            max_tokens: 4096,
+            api_key_env: "ANTHROPIC_API_KEY".to_string(),
+            system: None,
+        }
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -170,6 +204,19 @@ impl Cli {
                     }
                     "-h" | "--help" => Err(ParseError::HelpRequested),
                     other => Err(ParseError::UnknownAuditSubcommand(other.to_string())),
+                }
+            }
+            "session" => {
+                let sub = iter.next().ok_or(ParseError::MissingSessionSubcommand)?;
+                match sub.as_str() {
+                    "start" => {
+                        let args = parse_session_start_args(&mut iter)?;
+                        Ok(Cli {
+                            command: Command::SessionStart(args),
+                        })
+                    }
+                    "-h" | "--help" => Err(ParseError::HelpRequested),
+                    other => Err(ParseError::UnknownSessionSubcommand(other.to_string())),
                 }
             }
             other => Err(ParseError::UnknownSubcommand(other.to_string())),
@@ -284,6 +331,43 @@ where
     })
 }
 
+fn parse_session_start_args<'a, I>(iter: &mut I) -> Result<SessionStartArgs, ParseError>
+where
+    I: Iterator<Item = &'a String>,
+{
+    let mut args = SessionStartArgs::default();
+    while let Some(tok) = iter.next() {
+        match tok.as_str() {
+            "--model" => {
+                let val = iter.next().ok_or(ParseError::MissingValue("--model"))?;
+                args.model = val.clone();
+            }
+            "--max-tokens" => {
+                let val = iter
+                    .next()
+                    .ok_or(ParseError::MissingValue("--max-tokens"))?;
+                args.max_tokens = val.parse::<u32>().map_err(|_| ParseError::InvalidInt {
+                    opt: "--max-tokens",
+                    value: val.clone(),
+                })?;
+            }
+            "--api-key-env" => {
+                let val = iter
+                    .next()
+                    .ok_or(ParseError::MissingValue("--api-key-env"))?;
+                args.api_key_env = val.clone();
+            }
+            "--system" => {
+                let val = iter.next().ok_or(ParseError::MissingValue("--system"))?;
+                args.system = Some(val.clone());
+            }
+            "-h" | "--help" => return Err(ParseError::HelpRequested),
+            other => return Err(ParseError::UnknownOption(other.to_string())),
+        }
+    }
+    Ok(args)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +397,13 @@ mod tests {
         match cli.command {
             Command::AuditVerify(a) => a,
             other => panic!("expected Command::AuditVerify, got {other:?}"),
+        }
+    }
+
+    fn session_start_of(cli: Cli) -> SessionStartArgs {
+        match cli.command {
+            Command::SessionStart(a) => a,
+            other => panic!("expected Command::SessionStart, got {other:?}"),
         }
     }
 
@@ -562,6 +653,70 @@ mod tests {
     fn audit_help_short_circuits() {
         assert_eq!(
             Cli::parse(&argv(&["audit", "--help"])),
+            Err(ParseError::HelpRequested)
+        );
+    }
+
+    #[test]
+    fn session_no_subcommand_errors() {
+        assert_eq!(
+            Cli::parse(&argv(&["session"])),
+            Err(ParseError::MissingSessionSubcommand)
+        );
+    }
+
+    #[test]
+    fn session_unknown_subcommand_errors() {
+        assert!(matches!(
+            Cli::parse(&argv(&["session", "stop"])),
+            Err(ParseError::UnknownSessionSubcommand(s)) if s == "stop"
+        ));
+    }
+
+    #[test]
+    fn session_start_no_flags_uses_defaults() {
+        let cli = Cli::parse(&argv(&["session", "start"])).unwrap();
+        let args = session_start_of(cli);
+        assert_eq!(args.model, "claude-sonnet-4-6");
+        assert_eq!(args.max_tokens, 4096);
+        assert_eq!(args.api_key_env, "ANTHROPIC_API_KEY");
+        assert_eq!(args.system, None);
+    }
+
+    #[test]
+    fn session_start_overrides_parse() {
+        let cli = Cli::parse(&argv(&[
+            "session",
+            "start",
+            "--model",
+            "claude-opus-4-7",
+            "--max-tokens",
+            "1024",
+            "--api-key-env",
+            "MY_KEY",
+            "--system",
+            "be terse",
+        ]))
+        .unwrap();
+        let args = session_start_of(cli);
+        assert_eq!(args.model, "claude-opus-4-7");
+        assert_eq!(args.max_tokens, 1024);
+        assert_eq!(args.api_key_env, "MY_KEY");
+        assert_eq!(args.system, Some("be terse".to_string()));
+    }
+
+    #[test]
+    fn session_start_unknown_flag_errors() {
+        assert!(matches!(
+            Cli::parse(&argv(&["session", "start", "--bogus"])),
+            Err(ParseError::UnknownOption(s)) if s == "--bogus"
+        ));
+    }
+
+    #[test]
+    fn session_help_short_circuits() {
+        assert_eq!(
+            Cli::parse(&argv(&["session", "--help"])),
             Err(ParseError::HelpRequested)
         );
     }

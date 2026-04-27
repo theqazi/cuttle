@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-cli"
-version = "0.0.13"
+version = "0.0.14"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle top-level CLI binary. v0.0.13 adds cuttle audit verify (HMAC chain integrity check) over cuttle_audit::verify_chain. cuttle session start multi-turn REPL deferred to v0.0.14+ once new AuditEvent variants for conversation turns land."
+description = "Cuttle top-level CLI binary. v0.0.14 adds cuttle session start: multi-turn streaming REPL with per-session HMAC-chained audit log + transcript file. Tool dispatch deferred to v0.0.15+."
 
 [[bin]]
 name = "cuttle"
@@ -19,6 +19,9 @@ thiserror.workspace = true
 dirs.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
+sha2.workspace = true
+rand.workspace = true
+chrono.workspace = true
 cuttle-audit = { path = "../cuttle-audit" }
 cuttle-telemetry = { path = "../cuttle-telemetry" }
 cuttle-credential = { path = "../cuttle-credential" }

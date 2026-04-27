@@ -24,11 +24,15 @@ pub mod args;
 pub mod ask_cmd;
 pub mod audit_cmd;
 pub mod paths;
+pub mod session_cmd;
 pub mod telemetry_cmd;
 
 use std::io::Write;
 
-pub use args::{AskArgs, AuditVerifyArgs, Cli, Command, ParseError, PromptSource, TelemetryArgs};
+pub use args::{
+    AskArgs, AuditVerifyArgs, Cli, Command, ParseError, PromptSource, SessionStartArgs,
+    TelemetryArgs,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CliError {
@@ -43,6 +47,9 @@ pub enum CliError {
 
     #[error("audit subcommand failed: {0}")]
     Audit(#[from] audit_cmd::AuditCmdError),
+
+    #[error("session subcommand failed: {0}")]
+    Session(#[from] session_cmd::SessionCmdError),
 }
 
 /// CLI entry point. `argv` should INCLUDE the program name as `argv[0]`,
@@ -86,6 +93,13 @@ pub fn run<W: Write, E: Write>(argv: &[String], stdout: &mut W, stderr: &mut E) 
             Ok(()) => 0,
             Err(e) => {
                 let _ = writeln!(stderr, "cuttle audit verify: {e}");
+                2
+            }
+        },
+        Command::SessionStart(args) => match session_cmd::run(&args) {
+            Ok(()) => 0,
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle session start: {e}");
                 2
             }
         },
