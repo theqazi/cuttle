@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-cli"
-version = "0.0.12"
+version = "0.0.13"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle top-level CLI binary. v0.0.12 adds cuttle ask: single-turn streaming Claude call. cuttle session start (multi-turn REPL with audit chain integration) lands in v0.0.13."
+description = "Cuttle top-level CLI binary. v0.0.13 adds cuttle audit verify (HMAC chain integrity check) over cuttle_audit::verify_chain. cuttle session start multi-turn REPL deferred to v0.0.14+ once new AuditEvent variants for conversation turns land."
 
 [[bin]]
 name = "cuttle"

@@ -22,12 +22,13 @@
 
 pub mod args;
 pub mod ask_cmd;
+pub mod audit_cmd;
 pub mod paths;
 pub mod telemetry_cmd;
 
 use std::io::Write;
 
-pub use args::{AskArgs, Cli, Command, ParseError, PromptSource, TelemetryArgs};
+pub use args::{AskArgs, AuditVerifyArgs, Cli, Command, ParseError, PromptSource, TelemetryArgs};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CliError {
@@ -39,6 +40,9 @@ pub enum CliError {
 
     #[error("ask subcommand failed: {0}")]
     Ask(#[from] ask_cmd::AskCmdError),
+
+    #[error("audit subcommand failed: {0}")]
+    Audit(#[from] audit_cmd::AuditCmdError),
 }
 
 /// CLI entry point. `argv` should INCLUDE the program name as `argv[0]`,
@@ -75,6 +79,13 @@ pub fn run<W: Write, E: Write>(argv: &[String], stdout: &mut W, stderr: &mut E) 
             Ok(()) => 0,
             Err(e) => {
                 let _ = writeln!(stderr, "cuttle ask: {e}");
+                2
+            }
+        },
+        Command::AuditVerify(args) => match audit_cmd::run(&args, stdout) {
+            Ok(()) => 0,
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle audit verify: {e}");
                 2
             }
         },

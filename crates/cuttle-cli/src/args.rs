@@ -1,10 +1,11 @@
 //! Hand-rolled argv parser for `cuttle`.
 //!
-//! Grammar v0.0.12:
+//! Grammar v0.0.13:
 //!   cuttle [--help|-h] [--version|-V]
 //!   cuttle telemetry [--json] [--falsifier-eval] [--audit-log <PATH>]
 //!   cuttle ask [--model <MODEL>] [--max-tokens <N>]
 //!              [--api-key-env <VAR>] [--stdin] [<PROMPT>]
+//!   cuttle audit verify --audit-log <PATH> --chain-key-file <PATH>
 //!
 //! Trade-off vs `clap`: this file is now ~280 lines (with tests). Still
 //! zero supply-chain attack surface beyond `std`. clap will be worth
@@ -25,8 +26,9 @@ OPTIONS:
     -V, --version    Show version and exit
 
 SUBCOMMANDS:
-    telemetry    Show local aggregate signal from the audit log
-    ask          Send a single prompt to Claude (streaming response)
+    telemetry        Show local aggregate signal from the audit log
+    ask              Send a single prompt to Claude (streaming response)
+    audit verify     Verify an audit log's HMAC chain integrity
 
 Run `cuttle <subcommand> --help` for subcommand-specific help.
 
@@ -43,6 +45,11 @@ ASK OPTIONS:
                             (default: ANTHROPIC_API_KEY)
     --stdin                 Read prompt from stdin instead of positional argument
     <PROMPT>                Prompt text (positional; required unless --stdin)
+
+AUDIT VERIFY OPTIONS:
+    --audit-log <PATH>          Audit log file to verify (required)
+    --chain-key-file <PATH>     File containing the 32-byte session chain key
+                                (raw 32 bytes OR 64 hex chars; required)
 ";
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -67,6 +74,12 @@ pub enum ParseError {
     MissingPrompt,
     #[error("--stdin and a positional <PROMPT> are mutually exclusive")]
     PromptAndStdin,
+    #[error("missing required option {0}")]
+    MissingRequired(&'static str),
+    #[error("missing audit subcommand; expected `verify`")]
+    MissingAuditSubcommand,
+    #[error("unknown audit subcommand: {0}")]
+    UnknownAuditSubcommand(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -78,6 +91,13 @@ pub struct Cli {
 pub enum Command {
     Telemetry(TelemetryArgs),
     Ask(AskArgs),
+    AuditVerify(AuditVerifyArgs),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct AuditVerifyArgs {
+    pub audit_log: PathBuf,
+    pub chain_key_file: PathBuf,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -138,6 +158,19 @@ impl Cli {
                 Ok(Cli {
                     command: Command::Ask(args),
                 })
+            }
+            "audit" => {
+                let sub = iter.next().ok_or(ParseError::MissingAuditSubcommand)?;
+                match sub.as_str() {
+                    "verify" => {
+                        let args = parse_audit_verify_args(&mut iter)?;
+                        Ok(Cli {
+                            command: Command::AuditVerify(args),
+                        })
+                    }
+                    "-h" | "--help" => Err(ParseError::HelpRequested),
+                    other => Err(ParseError::UnknownAuditSubcommand(other.to_string())),
+                }
             }
             other => Err(ParseError::UnknownSubcommand(other.to_string())),
         }
@@ -222,6 +255,35 @@ where
     Ok(args)
 }
 
+fn parse_audit_verify_args<'a, I>(iter: &mut I) -> Result<AuditVerifyArgs, ParseError>
+where
+    I: Iterator<Item = &'a String>,
+{
+    let mut audit_log: Option<PathBuf> = None;
+    let mut chain_key_file: Option<PathBuf> = None;
+
+    while let Some(tok) = iter.next() {
+        match tok.as_str() {
+            "--audit-log" => {
+                let val = iter.next().ok_or(ParseError::MissingValue("--audit-log"))?;
+                audit_log = Some(PathBuf::from(val));
+            }
+            "--chain-key-file" => {
+                let val = iter
+                    .next()
+                    .ok_or(ParseError::MissingValue("--chain-key-file"))?;
+                chain_key_file = Some(PathBuf::from(val));
+            }
+            "-h" | "--help" => return Err(ParseError::HelpRequested),
+            other => return Err(ParseError::UnknownOption(other.to_string())),
+        }
+    }
+    Ok(AuditVerifyArgs {
+        audit_log: audit_log.ok_or(ParseError::MissingRequired("--audit-log"))?,
+        chain_key_file: chain_key_file.ok_or(ParseError::MissingRequired("--chain-key-file"))?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,6 +306,13 @@ mod tests {
         match cli.command {
             Command::Ask(a) => a,
             other => panic!("expected Command::Ask, got {other:?}"),
+        }
+    }
+
+    fn audit_verify_of(cli: Cli) -> AuditVerifyArgs {
+        match cli.command {
+            Command::AuditVerify(a) => a,
+            other => panic!("expected Command::AuditVerify, got {other:?}"),
         }
     }
 
@@ -429,6 +498,70 @@ mod tests {
     fn ask_help_short_circuits() {
         assert_eq!(
             Cli::parse(&argv(&["ask", "--help"])),
+            Err(ParseError::HelpRequested)
+        );
+    }
+
+    #[test]
+    fn audit_no_subcommand_errors() {
+        assert_eq!(
+            Cli::parse(&argv(&["audit"])),
+            Err(ParseError::MissingAuditSubcommand)
+        );
+    }
+
+    #[test]
+    fn audit_unknown_subcommand_errors() {
+        assert!(matches!(
+            Cli::parse(&argv(&["audit", "list"])),
+            Err(ParseError::UnknownAuditSubcommand(s)) if s == "list"
+        ));
+    }
+
+    #[test]
+    fn audit_verify_requires_audit_log() {
+        assert_eq!(
+            Cli::parse(&argv(&["audit", "verify", "--chain-key-file", "/k"])),
+            Err(ParseError::MissingRequired("--audit-log"))
+        );
+    }
+
+    #[test]
+    fn audit_verify_requires_chain_key_file() {
+        assert_eq!(
+            Cli::parse(&argv(&["audit", "verify", "--audit-log", "/a"])),
+            Err(ParseError::MissingRequired("--chain-key-file"))
+        );
+    }
+
+    #[test]
+    fn audit_verify_parses_both_paths() {
+        let cli = Cli::parse(&argv(&[
+            "audit",
+            "verify",
+            "--audit-log",
+            "/a.jsonl",
+            "--chain-key-file",
+            "/k.bin",
+        ]))
+        .unwrap();
+        let args = audit_verify_of(cli);
+        assert_eq!(args.audit_log, PathBuf::from("/a.jsonl"));
+        assert_eq!(args.chain_key_file, PathBuf::from("/k.bin"));
+    }
+
+    #[test]
+    fn audit_verify_unknown_flag_errors() {
+        assert!(matches!(
+            Cli::parse(&argv(&["audit", "verify", "--bogus"])),
+            Err(ParseError::UnknownOption(s)) if s == "--bogus"
+        ));
+    }
+
+    #[test]
+    fn audit_help_short_circuits() {
+        assert_eq!(
+            Cli::parse(&argv(&["audit", "--help"])),
             Err(ParseError::HelpRequested)
         );
     }
