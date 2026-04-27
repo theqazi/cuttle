@@ -69,9 +69,16 @@ def setup_canary(
         return os.path.exists(path)
 
     def cleanup() -> None:
+        # Path may end up as a file (write canary) or a directory (mkdir
+        # canary). Try both shapes; ignore everything else best-effort.
+        if not os.path.exists(path):
+            return
         try:
-            os.remove(path)
-        except FileNotFoundError:
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                os.remove(path)
+        except OSError:
             pass
 
     return {env_key: path}, check_fired, cleanup
@@ -102,6 +109,28 @@ def setup_secret(
 def setup_none() -> tuple[dict, Callable[[str], bool], Callable[[], None]]:
     """No external state. FIRED iff stdout contains 'FIRED'."""
     return {}, (lambda stdout: "FIRED" in stdout), (lambda: None)
+
+
+def setup_outside_file_exists(
+    env_key: str,
+) -> tuple[dict, Callable[[str], bool], Callable[[], None]]:
+    """Mint an outside-root file the attack tries to remove or modify.
+    FIRED iff the file is gone after the attack (i.e. sandbox failed
+    to deny unlink/rename/chmod-and-cascade)."""
+    fd, path = tempfile.mkstemp(prefix="cuttle_harness_pre_", suffix=".target")
+    os.write(fd, b"present\n")
+    os.close(fd)
+
+    def check_fired(_stdout: str) -> bool:
+        return not os.path.exists(path)
+
+    def cleanup() -> None:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+    return {env_key: path}, check_fired, cleanup
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +223,56 @@ except Exception as e:
     print(f'BLOCKED:{type(e).__name__}')
 """,
     },
+    {
+        "id": "mkdir_outside_root",
+        "desc": "os.makedirs() creates a directory at an outside-root path",
+        "setup": lambda: setup_canary("ATTACK_DIR_TARGET"),
+        "attack": r"""
+import os
+target = os.environ['ATTACK_DIR_TARGET']
+try:
+    os.makedirs(target, exist_ok=False)
+    print('made')
+except Exception as e:
+    print(f'BLOCKED:{type(e).__name__}')
+""",
+    },
+    {
+        "id": "unlink_outside_root",
+        "desc": "os.remove() deletes a pre-existing file outside project_root",
+        "setup": lambda: setup_outside_file_exists("ATTACK_UNLINK_TARGET"),
+        "attack": r"""
+import os
+target = os.environ['ATTACK_UNLINK_TARGET']
+try:
+    os.remove(target)
+    print('unlinked')
+except Exception as e:
+    print(f'BLOCKED:{type(e).__name__}')
+""",
+    },
+    # NOTE: /dev/disk0 read attempt was tried as an exploit and dropped
+    # because macOS System Integrity Protection denies it even
+    # unsandboxed, so the test reports TEST-BUG (NO+BLOCKED) regardless
+    # of cuttle-sandbox behavior. A future replacement could target a
+    # /dev path that's user-readable but should still be denied by
+    # cuttle's SBPL allowlist.
+    {
+        "id": "list_users_dir",
+        "desc": "os.listdir('/Users') enumerates all macOS user accounts",
+        "setup": setup_none,
+        "attack": r"""
+import os
+try:
+    entries = os.listdir('/Users')
+    if entries:
+        print(f'FIRED:users={len(entries)}')
+    else:
+        print('BLOCKED:empty_listing')
+except Exception as e:
+    print(f'BLOCKED:{type(e).__name__}')
+""",
+    },
 ]
 
 
@@ -275,21 +354,24 @@ def main() -> None:
 
     rows = []
     for ex in chosen:
-        env_extra, check_fired, cleanup = ex["setup"]()
-
+        # Each phase gets its own fresh setup so external state (canary
+        # files, pre-existing targets) doesn't leak from the unsandboxed
+        # run into the sandboxed one. Earlier shared-state design caused
+        # false BAD-CONTAINMENT findings whenever an unsandboxed attack
+        # left the bad-state in place across phases.
+        env1, check_fired1, cleanup1 = ex["setup"]()
         try:
-            unsbx = run_attack(None, ex, env_extra)
-            unsbx_fired = check_fired(unsbx["stdout"])
-
-            # Reset external state between phases so the sandboxed run
-            # starts from the same precondition (canary absent).
-            if ex["id"] in ("shell_inject_canary", "file_write_outside_root"):
-                cleanup()
-
-            sbx = run_attack(cuttle_bin, ex, env_extra)
-            sbx_fired = check_fired(sbx["stdout"])
+            unsbx = run_attack(None, ex, env1)
+            unsbx_fired = check_fired1(unsbx["stdout"])
         finally:
-            cleanup()
+            cleanup1()
+
+        env2, check_fired2, cleanup2 = ex["setup"]()
+        try:
+            sbx = run_attack(cuttle_bin, ex, env2)
+            sbx_fired = check_fired2(sbx["stdout"])
+        finally:
+            cleanup2()
 
         clean_pass = unsbx_fired and not sbx_fired
         if clean_pass:
