@@ -23,15 +23,17 @@
 pub mod args;
 pub mod ask_cmd;
 pub mod audit_cmd;
+pub mod banner;
 pub mod paths;
+pub mod sandbox_cmd;
 pub mod session_cmd;
 pub mod telemetry_cmd;
 
 use std::io::Write;
 
 pub use args::{
-    AskArgs, AuditVerifyArgs, Cli, Command, ParseError, PromptSource, SessionStartArgs,
-    TelemetryArgs,
+    AskArgs, AuditVerifyArgs, Cli, Command, ParseError, PromptSource, SandboxProfileArgs,
+    SandboxRunArgs, SessionStartArgs, TelemetryArgs,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -50,6 +52,9 @@ pub enum CliError {
 
     #[error("session subcommand failed: {0}")]
     Session(#[from] session_cmd::SessionCmdError),
+
+    #[error("sandbox subcommand failed: {0}")]
+    Sandbox(#[from] sandbox_cmd::SandboxCmdError),
 }
 
 /// CLI entry point. `argv` should INCLUDE the program name as `argv[0]`,
@@ -100,6 +105,29 @@ pub fn run<W: Write, E: Write>(argv: &[String], stdout: &mut W, stderr: &mut E) 
             Ok(()) => 0,
             Err(e) => {
                 let _ = writeln!(stderr, "cuttle session start: {e}");
+                2
+            }
+        },
+        Command::SandboxProfile(args) => match sandbox_cmd::run_profile(&args, stdout) {
+            Ok(()) => 0,
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle sandbox profile: {e}");
+                2
+            }
+        },
+        Command::SandboxRun(args) => match sandbox_cmd::run_run(&args, stdout) {
+            Ok(status) => {
+                // Propagate the sandboxed program's exit status, clamped
+                // to a single byte for std::process::ExitCode. Negative
+                // (signal-killed) maps to 254; anything > 255 wraps.
+                if status < 0 {
+                    254
+                } else {
+                    status & 0xff
+                }
+            }
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle sandbox run: {e}");
                 2
             }
         },

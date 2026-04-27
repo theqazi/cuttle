@@ -28,6 +28,7 @@
 //! abort is v0.0.15+.
 
 use crate::args::SessionStartArgs;
+use crate::banner;
 use crate::paths;
 use chrono::Utc;
 use cuttle_anthropic::{
@@ -181,11 +182,12 @@ fn mint_session_id() -> String {
 }
 
 fn print_banner(session_id: &str, session_dir: &std::path::Path) {
-    println!("cuttle session: {session_id}");
+    print!("{}", banner::render());
+    println!();
+    println!("session: {session_id}");
     println!("  audit log:  {}/audit.jsonl", session_dir.display());
     println!("  chain key:  {}/chain.key", session_dir.display());
     println!("  transcript: {}/transcript.jsonl", session_dir.display());
-    println!("type /quit or Ctrl+D to exit. enter your prompt below.");
     println!();
 }
 

@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-cli"
-version = "0.0.14"
+version = "0.0.15"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle top-level CLI binary. v0.0.14 adds cuttle session start: multi-turn streaming REPL with per-session HMAC-chained audit log + transcript file. Tool dispatch deferred to v0.0.15+."
+description = "Cuttle top-level CLI binary. v0.0.15 wires cuttle-sandbox into the CLI: cuttle sandbox profile + cuttle sandbox run. Tool dispatch from the model loop still deferred (v0.0.16+); these subcommands give the operator direct access to the sandbox primitive for testing."
 
 [[bin]]
 name = "cuttle"
@@ -26,6 +26,7 @@ cuttle-audit = { path = "../cuttle-audit" }
 cuttle-telemetry = { path = "../cuttle-telemetry" }
 cuttle-credential = { path = "../cuttle-credential" }
 cuttle-anthropic = { path = "../cuttle-anthropic" }
+cuttle-sandbox = { path = "../cuttle-sandbox" }
 
 [dev-dependencies]
 tempfile.workspace = true

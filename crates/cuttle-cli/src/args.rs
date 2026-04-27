@@ -1,6 +1,6 @@
 //! Hand-rolled argv parser for `cuttle`.
 //!
-//! Grammar v0.0.14:
+//! Grammar v0.0.15:
 //!   cuttle [--help|-h] [--version|-V]
 //!   cuttle telemetry [--json] [--falsifier-eval] [--audit-log <PATH>]
 //!   cuttle ask [--model <MODEL>] [--max-tokens <N>]
@@ -8,6 +8,8 @@
 //!   cuttle audit verify --audit-log <PATH> --chain-key-file <PATH>
 //!   cuttle session start [--model <MODEL>] [--max-tokens <N>]
 //!                         [--api-key-env <VAR>] [--system <SYSTEM>]
+//!   cuttle sandbox profile [--project-root <PATH>]
+//!   cuttle sandbox run [--project-root <PATH>] <PROGRAM> [ARGS...]
 //!
 //! Trade-off vs `clap`: this file is now ~280 lines (with tests). Still
 //! zero supply-chain attack surface beyond `std`. clap will be worth
@@ -32,6 +34,8 @@ SUBCOMMANDS:
     ask              Send a single prompt to Claude (streaming response)
     audit verify     Verify an audit log's HMAC chain integrity
     session start    Start an interactive multi-turn REPL with audit chain
+    sandbox profile  Print the SBPL profile cuttle would apply
+    sandbox run      Run a command under the macOS sandbox (testing surface)
 
 Run `cuttle <subcommand> --help` for subcommand-specific help.
 
@@ -60,6 +64,17 @@ SESSION START OPTIONS:
     --api-key-env <VAR>         Environment variable holding the API key
                                 (default: ANTHROPIC_API_KEY)
     --system <SYSTEM>           System prompt applied to every turn (optional)
+
+SANDBOX PROFILE OPTIONS:
+    --project-root <PATH>       Absolute path used for the file-read/write subpaths
+                                in the rendered SBPL (default: current directory)
+
+SANDBOX RUN OPTIONS:
+    --project-root <PATH>       Absolute path scoped as the sandbox's read+write
+                                root (default: current directory)
+    <PROGRAM> [ARGS...]         Program + args to execute under the sandbox.
+                                The program must be in the default-allowed
+                                binary set; otherwise the sandbox denies exec.
 ";
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -94,6 +109,12 @@ pub enum ParseError {
     MissingSessionSubcommand,
     #[error("unknown session subcommand: {0}")]
     UnknownSessionSubcommand(String),
+    #[error("missing sandbox subcommand; expected `profile` or `run`")]
+    MissingSandboxSubcommand,
+    #[error("unknown sandbox subcommand: {0}")]
+    UnknownSandboxSubcommand(String),
+    #[error("missing required <PROGRAM> for `cuttle sandbox run`")]
+    MissingProgram,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -107,6 +128,21 @@ pub enum Command {
     Ask(AskArgs),
     AuditVerify(AuditVerifyArgs),
     SessionStart(SessionStartArgs),
+    SandboxProfile(SandboxProfileArgs),
+    SandboxRun(SandboxRunArgs),
+}
+
+#[derive(Debug, PartialEq, Eq, Default)]
+pub struct SandboxProfileArgs {
+    /// None means "use the current working directory at runtime".
+    pub project_root: Option<PathBuf>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct SandboxRunArgs {
+    pub project_root: Option<PathBuf>,
+    pub program: PathBuf,
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -219,6 +255,25 @@ impl Cli {
                     other => Err(ParseError::UnknownSessionSubcommand(other.to_string())),
                 }
             }
+            "sandbox" => {
+                let sub = iter.next().ok_or(ParseError::MissingSandboxSubcommand)?;
+                match sub.as_str() {
+                    "profile" => {
+                        let args = parse_sandbox_profile_args(&mut iter)?;
+                        Ok(Cli {
+                            command: Command::SandboxProfile(args),
+                        })
+                    }
+                    "run" => {
+                        let args = parse_sandbox_run_args(&mut iter)?;
+                        Ok(Cli {
+                            command: Command::SandboxRun(args),
+                        })
+                    }
+                    "-h" | "--help" => Err(ParseError::HelpRequested),
+                    other => Err(ParseError::UnknownSandboxSubcommand(other.to_string())),
+                }
+            }
             other => Err(ParseError::UnknownSubcommand(other.to_string())),
         }
     }
@@ -328,6 +383,72 @@ where
     Ok(AuditVerifyArgs {
         audit_log: audit_log.ok_or(ParseError::MissingRequired("--audit-log"))?,
         chain_key_file: chain_key_file.ok_or(ParseError::MissingRequired("--chain-key-file"))?,
+    })
+}
+
+fn parse_sandbox_profile_args<'a, I>(iter: &mut I) -> Result<SandboxProfileArgs, ParseError>
+where
+    I: Iterator<Item = &'a String>,
+{
+    let mut args = SandboxProfileArgs::default();
+    while let Some(tok) = iter.next() {
+        match tok.as_str() {
+            "--project-root" => {
+                let val = iter
+                    .next()
+                    .ok_or(ParseError::MissingValue("--project-root"))?;
+                args.project_root = Some(PathBuf::from(val));
+            }
+            "-h" | "--help" => return Err(ParseError::HelpRequested),
+            other => return Err(ParseError::UnknownOption(other.to_string())),
+        }
+    }
+    Ok(args)
+}
+
+fn parse_sandbox_run_args<'a, I>(iter: &mut I) -> Result<SandboxRunArgs, ParseError>
+where
+    I: Iterator<Item = &'a String>,
+{
+    let mut project_root: Option<PathBuf> = None;
+    let mut program: Option<PathBuf> = None;
+    let mut child_args: Vec<String> = Vec::new();
+
+    while let Some(tok) = iter.next() {
+        // Once we have the program, everything else is verbatim child args
+        // (including things that look like flags). This lets the operator
+        // pass `--foo` to the sandboxed program without the cuttle parser
+        // grabbing it.
+        if program.is_some() {
+            child_args.push(tok.clone());
+            continue;
+        }
+        match tok.as_str() {
+            "--project-root" => {
+                let val = iter
+                    .next()
+                    .ok_or(ParseError::MissingValue("--project-root"))?;
+                project_root = Some(PathBuf::from(val));
+            }
+            "-h" | "--help" => return Err(ParseError::HelpRequested),
+            "--" => {
+                // Explicit separator: the next positional is the program.
+                // Skip; the next loop iteration will pick up the program
+                // via the `program.is_none()` branch below.
+                continue;
+            }
+            other if other.starts_with("--") => {
+                return Err(ParseError::UnknownOption(other.to_string()));
+            }
+            other => program = Some(PathBuf::from(other)),
+        }
+    }
+
+    let program = program.ok_or(ParseError::MissingProgram)?;
+    Ok(SandboxRunArgs {
+        project_root,
+        program,
+        args: child_args,
     })
 }
 
