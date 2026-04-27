@@ -1,0 +1,18 @@
+# Bench result JSONs are per-run artifacts, not source. Each run
+# overwrites or appends, and they contain model response payloads we
+# don't want in version control.
+results*.json
+harness-results.json
+*.cache.json
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment overrides
+.env
+.envrc
