@@ -4,7 +4,8 @@
 //!   cuttle [--help|-h] [--version|-V]
 //!   cuttle telemetry [--json] [--falsifier-eval] [--audit-log <PATH>]
 //!   cuttle ask [--model <MODEL>] [--max-tokens <N>]
-//!              [--api-key-env <VAR>] [--stdin] [<PROMPT>]
+//!              [--api-key-env <VAR>] [--system <SYSTEM>]
+//!              [--stdin] [<PROMPT>]
 //!   cuttle audit verify --audit-log <PATH> --chain-key-file <PATH>
 //!   cuttle session start [--model <MODEL>] [--max-tokens <N>]
 //!                         [--api-key-env <VAR>] [--system <SYSTEM>]
@@ -56,6 +57,7 @@ ASK OPTIONS:
     --max-tokens <N>        Maximum output tokens (default: 4096)
     --api-key-env <VAR>     Environment variable holding the API key
                             (default: ANTHROPIC_API_KEY)
+    --system <SYSTEM>       System prompt sent with the request (optional)
     --stdin                 Read prompt from stdin instead of positional argument
     <PROMPT>                Prompt text (positional; required unless --stdin)
 
@@ -245,6 +247,10 @@ pub struct AskArgs {
     pub model: String,
     pub max_tokens: u32,
     pub api_key_env: String,
+    /// Optional system prompt sent with the request. Mirrors session start's
+    /// --system. Used by the bench wrapper at ~/m0qazi/bench so the cuttle
+    /// arm and the direct-API arm send the same SYSTEM_PROMPT.
+    pub system: Option<String>,
     /// Either Some(prompt) (positional) OR Stdin (reader).
     pub source: PromptSource,
 }
@@ -261,7 +267,8 @@ impl Default for AskArgs {
             model: "claude-sonnet-4-6".to_string(),
             max_tokens: 4096,
             api_key_env: "ANTHROPIC_API_KEY".to_string(),
-            // Placeholder — real value populated during parse. Default
+            system: None,
+            // Placeholder; real value populated during parse. Default
             // exists so test scaffolding can `..AskArgs::default()` cleanly.
             source: PromptSource::Stdin,
         }
@@ -417,6 +424,10 @@ where
                     .next()
                     .ok_or(ParseError::MissingValue("--api-key-env"))?;
                 args.api_key_env = val.clone();
+            }
+            "--system" => {
+                let val = iter.next().ok_or(ParseError::MissingValue("--system"))?;
+                args.system = Some(val.clone());
             }
             "--stdin" => stdin_flag = true,
             "-h" | "--help" => return Err(ParseError::HelpRequested),
@@ -842,6 +853,29 @@ mod tests {
         assert_eq!(
             Cli::parse(&argv(&["ask", "--help"])),
             Err(ParseError::HelpRequested)
+        );
+    }
+
+    #[test]
+    fn ask_system_flag_parses() {
+        let cli = Cli::parse(&argv(&["ask", "--system", "be terse", "hello"])).unwrap();
+        let args = ask_of(cli);
+        assert_eq!(args.system.as_deref(), Some("be terse"));
+        assert_eq!(args.source, PromptSource::Inline("hello".to_string()));
+    }
+
+    #[test]
+    fn ask_system_default_is_none() {
+        let cli = Cli::parse(&argv(&["ask", "hi"])).unwrap();
+        let args = ask_of(cli);
+        assert_eq!(args.system, None);
+    }
+
+    #[test]
+    fn ask_system_missing_value_errors() {
+        assert_eq!(
+            Cli::parse(&argv(&["ask", "--system"])),
+            Err(ParseError::MissingValue("--system"))
         );
     }
 

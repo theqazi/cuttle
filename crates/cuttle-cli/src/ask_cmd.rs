@@ -70,7 +70,10 @@ pub fn run<W: Write>(args: &AskArgs, out: &mut W) -> Result<(), AskCmdError> {
     let api_key = ApiKey::resolve(&args.api_key_env)?;
 
     let model = parse_model(&args.model);
-    let request = Request::new(model, vec![Message::user_text(prompt)], args.max_tokens);
+    let mut request = Request::new(model, vec![Message::user_text(prompt)], args.max_tokens);
+    if let Some(sys) = &args.system {
+        request.system = Some(cuttle_anthropic::SystemContent::Plain(sys.clone()));
+    }
 
     let client = AnthropicClient::new(ClientConfig::default()).map_err(AskCmdError::ClientBuild)?;
 

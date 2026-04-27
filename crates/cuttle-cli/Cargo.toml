@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-cli"
-version = "0.0.16"
+version = "0.0.17"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle top-level CLI binary. v0.0.16 adds cuttle credential set/show/delete (Keychain-backed) + cascade-resolve in ask + session so ANTHROPIC_API_KEY env-var becomes optional once a Keychain entry is set."
+description = "Cuttle top-level CLI binary. v0.0.17 adds --system flag to cuttle ask (mirrors session start), enabling apples-to-apples bench comparison with the direct-Anthropic-SDK arm at ~/m0qazi/bench."
 
 [[bin]]
 name = "cuttle"
