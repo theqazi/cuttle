@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.13 (session 5 late: streaming + cuttle ask + prompt-cache support; 212/212 tests; daily-driver-shape command works end-to-end + cost-efficient via prompt cache; 2026-04-26)
+**Version**: handoff-0.14 (session 5 close: streaming + ask + prompt-cache + audit-verify; 228/228 tests; cuttle is now operator-functional for ask + telemetry + audit-verify surfaces; 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -44,6 +44,42 @@ Commits added since handoff-0.11:
   CacheControl::ephemeral() that maps to Anthropic's 5-min ephemeral cache.
   Daily-driver impact: ~10x cost reduction on repeated long-prefix calls.
   Backward-compat preserved via From<String> + From<&str> impls.
+- `63dce86` cuttle-cli v0.0.13: cuttle audit verify subcommand. Hand-rolled
+  hex parser + raw-bytes-or-hex auto-detect on the keyfile (~30 LOC, no
+  hex-crate dep). 2-level argv dispatch. Smoke verified: bad-key path
+  produces "is 9 bytes; expected exactly 32 raw bytes or 64 hex characters".
+  HMAC mismatch surfaces "verification failed at entry seq=N".
+
+## Open design questions for `cuttle session start` (next big move)
+
+The interactive REPL is the highest-value remaining build, but it crosses
+product-shape lines that need explicit operator decisions:
+
+1. **Chain key persistence**: where does the per-session chain key live?
+   Options: (a) generated fresh per session, written to
+   `~/.cuttle/sessions/<id>/chain.key` mode 0600; (b) stored in macOS
+   Keychain alongside the API-key entry; (c) operator generates once and
+   reuses across sessions. Each has different audit-verify ergonomics.
+2. **Multi-turn audit-event shape**: AuditEvent currently has no variant
+   for "user message" or "assistant message". Options: (a) add new
+   variants `UserPrompt { content_sha256, length }` + `AssistantResponse
+{ content_sha256, length, usage }`; (b) treat conversation as a
+   ToolDispatch with synthetic tool name; (c) keep audit log strictly for
+   gate decisions and store conversation transcript separately. PRD §6.1.6
+   suggests (a) but the TDD §5 audit-log shape was designed with (c) in
+   mind.
+3. **Tool dispatch**: with what tool definitions? Bash + file-read + file-
+   write covers the daily-driver minimum. Each tool needs (a) JSON-schema
+   for the API; (b) cuttle-side handler that goes through cuttle-sandbox;
+   (c) ToolRegistry entry tagging secret-bearing-ness.
+4. **Conversation history shape**: in-memory only? persisted to
+   `~/.cuttle/sessions/<id>/transcript.jsonl`? Resume across cuttle
+   restarts? Per CLAUDE.md privacy mandate, transcripts can hold PII.
+
+Recommend Mo decide #1 + #2 before the v0.0.14 commit (each is a load-
+bearing PRD-grain decision; making them implicitly via code wires them
+into permanent shape). #3 + #4 can be deferred behind a `cuttle session
+start --tools=none` switch that ships a no-tools REPL first.
 
 Smoke verified by invoking the actual binary (no API key needed for error
 paths): missing-prompt error names exact next action; invalid --max-tokens
