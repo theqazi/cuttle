@@ -45,6 +45,12 @@ futures-util = "0.3"
 bytes = "1"
 url = "2"
 eventsource-stream = "0.2"
+# macOS Keychain bindings (security-framework). Pure-Rust + thin FFI to
+# system Security.framework; no OpenSSL. Used by cuttle-credential v0.0.4
+# for the Keychain credential backend. Operator-prompt-on-first-access
+# behavior is the default; "Always Allow" toggle is captured via the
+# existing AuditEvent::KeychainAlwaysAllowToggled variant.
+security-framework = "3"
 
 [profile.release]
 panic = "abort"

@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-credential"
-version = "0.0.3"
+version = "0.0.4"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle credential vault: ApiKey + HelperHash domain primitives. v0.0.3 removes the read-once consume() panic that broke cuttle session start on turn 2; ZeroizeOnDrop remains the security boundary. Vault-only constructor invariant preserved."
+description = "Cuttle credential vault: ApiKey + HelperHash domain primitives. v0.0.4 adds macOS Keychain backend (store/fetch/delete/metadata) + ApiKey::resolve cascade (env → Keychain). Vault-only constructor invariant preserved."
 
 [dependencies]
 serde.workspace = true
@@ -15,6 +15,9 @@ subtle.workspace = true
 zeroize.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

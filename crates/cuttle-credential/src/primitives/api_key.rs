@@ -40,11 +40,19 @@ pub struct ApiKey {
 impl ApiKey {
     /// Construct an `ApiKey` from raw bytes fetched by the credential vault.
     /// Visibility is `pub(crate)`: only the credential-vault crate can mint.
-    /// `#[allow(dead_code)]` because the Keychain backend code that calls
-    /// this lives in TDD §3 / future work; for v0.0.1 scaffolding only the
-    /// tests exercise this path.
+    /// Used by tests; production Keychain reads go through
+    /// `from_keychain_bytes` below.
     #[allow(dead_code)]
     pub(crate) fn from_keychain_fetch(bytes: Vec<u8>) -> Self {
+        Self { bytes }
+    }
+
+    /// Construct an `ApiKey` from bytes returned by `keychain::fetch_from_keychain`.
+    /// Same `pub(crate)` discipline as `from_keychain_fetch`; the
+    /// distinct name documents the call site at the keychain module
+    /// boundary so a future audit can grep for "where does keychain
+    /// data become an ApiKey".
+    pub(crate) fn from_keychain_bytes(bytes: Vec<u8>) -> Self {
         Self { bytes }
     }
 
@@ -94,6 +102,75 @@ impl ApiKey {
     pub fn consume(&self) -> &[u8] {
         &self.bytes
     }
+}
+
+impl ApiKey {
+    /// Resolve an API key with cascade: env var first, then macOS Keychain
+    /// under the same account name. Returns the first hit; if neither
+    /// works, surfaces an aggregate error naming both options so the
+    /// operator knows what to fix.
+    ///
+    /// `account_name` is used both as the env-var name AND as the
+    /// Keychain account under `dev.cuttle.api-keys`. So the operator can
+    /// either `export ANTHROPIC_API_KEY=...` or `cuttle credential set
+    /// --account ANTHROPIC_API_KEY` and either path wins.
+    ///
+    /// Resolution order:
+    /// 1. `ApiKey::from_env_var(account_name)` — if env var is set + valid.
+    /// 2. `crate::keychain::fetch_from_keychain(account_name)` — if a
+    ///    Keychain entry exists under that account.
+    /// 3. `ResolveError::NoCredentialFound` with both attempts' errors.
+    pub fn resolve(account_name: &str) -> Result<Self, ResolveError> {
+        // Try env var first. NotSet falls through to Keychain; other env
+        // errors (Empty / NonUtf8 / SurroundingWhitespace) are operator
+        // bugs that deserve immediate surfacing rather than silent fallback.
+        match Self::from_env_var(account_name) {
+            Ok(k) => return Ok(k),
+            Err(ApiKeyEnvError::NotSet { .. }) => {} // fall through to Keychain.
+            Err(other) => return Err(ResolveError::EnvInvalid(other)),
+        }
+
+        // Try Keychain. NotFound (or Unsupported on non-macOS) falls
+        // through to NoCredentialFound; System errors propagate (Keychain
+        // is broken, not just empty).
+        match crate::keychain::fetch_from_keychain(account_name) {
+            Ok(k) => Ok(k),
+            Err(crate::keychain::KeychainError::NotFound { .. })
+            | Err(crate::keychain::KeychainError::Unsupported) => {
+                Err(ResolveError::NoCredentialFound {
+                    account: account_name.to_string(),
+                })
+            }
+            Err(other) => Err(ResolveError::KeychainBroken(other)),
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ResolveError {
+    /// Env var was set but malformed (empty / non-UTF8 / has surrounding
+    /// whitespace). Treated as a fatal operator error rather than
+    /// silently falling back to Keychain.
+    #[error("environment variable is set but invalid: {0}")]
+    EnvInvalid(#[from] ApiKeyEnvError),
+
+    /// Keychain backend returned a non-NotFound error (Keychain locked,
+    /// system framework crashed, etc.). Distinct from NoCredentialFound
+    /// so the operator gets specific guidance.
+    #[error("Keychain backend failed: {0}")]
+    KeychainBroken(crate::keychain::KeychainError),
+
+    /// Neither the env var nor the Keychain held a credential under the
+    /// requested account. The operator-facing message names both fix-it
+    /// commands so the operator does not have to think.
+    #[error(
+        "no API key found for account {account}.\n\
+         Either:\n  \
+           export {account}=\"sk-ant-...\"\n\
+         OR (preferred):\n  \
+           cuttle credential set --account {account}"
+    )]
+    NoCredentialFound { account: String },
 }
 
 // No Display, Debug, Clone derives. ApiKey leaves the credential vault
