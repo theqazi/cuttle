@@ -4,7 +4,7 @@
 this file plus the project memory at
 `/Users/m0qazi/.claude/projects/-Users-m0qazi-cuttle/memory/`.
 
-**Version**: handoff-0.14 (session 5 close: streaming + ask + prompt-cache + audit-verify; 228/228 tests; cuttle is now operator-functional for ask + telemetry + audit-verify surfaces; 2026-04-26)
+**Version**: handoff-0.15 (session 6: cuttle session start REPL works end-to-end; 248/248 tests; per-session HMAC-chained audit + 0600 transcript layout; provenance-without-content separation working as designed; 2026-04-26)
 **Tier**: SYSTEM (per global CLAUDE.md). Full pipeline: PRD → TDD → REVIEW-1 → REVIEW-2 → FIX-DOCS → DESIGN → API → LEGAL → PRIVACY → WRITE → COPY → REVIEW → SECURE → SBOM.
 
 ---
@@ -19,6 +19,47 @@ sharpened pitch: the framework, finally able to enforce _in front of_ execution
 instead of _behind_ it, because the substrate is no longer the bottleneck. v0.1 is
 single-operator, CLI-only, Anthropic-API-key-only (ToS-clean), and ships as an
 implementation existence proof, not an effect claim.
+
+## Session 6 update (handoff-0.15)
+
+**Headline**: `cuttle session start` lands. Multi-turn streaming REPL with
+per-session audit chain and transcript. The full daily-driver loop works
+end-to-end with `ANTHROPIC_API_KEY` exported. 248/248 tests; clippy clean.
+
+Mo's session-6 design decisions (per the open-questions block in
+handoff-0.14) baked into code:
+
+- **Chain key**: fresh per session, written to
+  `~/.cuttle/sessions/<id>/chain.key` mode 0600 + create_new (refuses to
+  clobber). Operator points `cuttle audit verify --chain-key-file <PATH>`
+  at this file post-session.
+- **Multi-turn audit-event shape**: new `UserPrompt { content_sha256,
+length }` and `AssistantResponse { content_sha256, length, input_tokens,
+output_tokens }` variants on `AuditEvent`. Content lives in transcript;
+  audit log carries digest + length only. **Provenance without content** —
+  chain proves "these N turns of these lengths happened in this order
+  with these token costs" without holding PII.
+- **Tool dispatch**: deferred. v0.0.14 ships `--tools=none` shape (no
+  tool dispatch at all). Bash + read + write + dispatch infrastructure
+  is v0.0.15+.
+- **Transcript persistence**: `~/.cuttle/sessions/<id>/transcript.jsonl`
+  mode 0600. JSONL `{role, content, timestamp_utc}` per turn. No
+  auto-resume; the audit log + transcript are the durable record.
+
+Commits added in session 6:
+
+- `3aa311b` cuttle-audit v0.0.4 + cuttle-telemetry v0.0.11: new event
+  variants + SessionSummary aggregate + 5-tuple summarize() return.
+- `cd0abe8` cuttle-cli v0.0.14: cuttle session start REPL implementation
+  (~465 LOC in session_cmd.rs, including 14 unit tests).
+
+After a session, the full audit cycle works:
+`cuttle session start` → multi-turn conversation → exit
+`cuttle audit verify --audit-log ~/.cuttle/sessions/<id>/audit.jsonl
+                        --chain-key-file ~/.cuttle/sessions/<id>/chain.key`
+→ "audit log verified. chain head: <hex>"
+`cuttle telemetry --audit-log ~/.cuttle/sessions/<id>/audit.jsonl
+                    --falsifier-eval` → aggregate + falsifier eval
 
 ## Mid-session 5 update (handoff-0.12)
 
