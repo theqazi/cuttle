@@ -167,7 +167,8 @@ impl SandboxProfile {
              \x20   (literal \"/dev/null\")\n\
              \x20   (literal \"/dev/random\")\n\
              \x20   (literal \"/dev/urandom\")\n\
-             \x20   (literal \"/dev/dtracehelper\"))\n\
+             \x20   (literal \"/dev/dtracehelper\")\n\
+             \x20   (subpath \"/dev/fd\"))\n\
              (deny file-read*\n\
              \x20   (subpath \"/var/folders\")\n\
              \x20   (subpath \"/private/var/folders\"))\n\

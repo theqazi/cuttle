@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-sandbox"
-version = "0.0.12"
+version = "0.0.13"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle macOS sandbox primitive. Generates SBPL profiles + invokes the standard macOS sandbox binary per TDD §4 + D-2026-04-26-26. v0.0.9 ships profile generation + sync spawn; rlimit enforcement deferred to v0.0.10. v0.0.11 narrowed (subpath /var) to specific paths but broke /usr/bin/python3 startup: xcode-select couldn't resolve /var/select/developer_dir, masking 5/5 'contained' results as silent Python-failed-to-launch (false BLOCKED). v0.0.12 reverts /var to broad subpath-allow but adds an explicit (deny file-read* (subpath /var/folders)) + a re-allow on the project_root subpath so /var/folders/<user>/T/ stays denied while project_root reads still work. Validated by bench/harness_suite.py going 8/8 contained against an expanded exploit set (mkdir, unlink, list_users_dir, plus the original 5)."
+description = "Cuttle macOS sandbox primitive. Generates SBPL profiles + invokes the standard macOS sandbox binary per TDD §4 + D-2026-04-26-26. v0.0.9 ships profile generation + sync spawn; rlimit enforcement deferred to v0.0.10. v0.0.11 narrowed /var (broke Python startup; reverted). v0.0.12 layered (allow /var) + (deny /var/folders) + (re-allow project_root) so per-user TMPDIR secrets stay denied while project_root reads work; validated 10/10 contained on bench/harness_suite.py. v0.0.13 fixes KI-1 (Python+disallowed-binary hang): added (subpath /dev/fd) to file-read* so Python 3.9's _posixsubprocess fork-exec helper uses its fast /dev/fd-enumeration path instead of falling back to a brute-force close(fd) loop from 3 to RLIMIT_NOFILE that would never finish. The sandboxed Python child now receives EPERM cleanly when spawning a non-allowlisted binary (git, sips, curl) instead of spinning at 99% CPU. command_injection and subprocess_shell_inject bench tasks no longer need phase_c_skip."
 
 [dependencies]
 serde.workspace = true

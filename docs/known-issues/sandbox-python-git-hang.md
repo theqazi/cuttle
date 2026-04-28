@@ -1,11 +1,26 @@
 # KI-1: Python-subprocess hang on disallowed binaries under sandbox
 
-**Status:** open, deferred (not on v0.1 critical path).
-**Affects:** `cuttle-sandbox` v0.0.10 onward (likely all versions; not
-confirmed against earlier).
+**Status:** **FIXED in `cuttle-sandbox` v0.0.13** (2026-04-27).
+**Affected:** `cuttle-sandbox` v0.0.10 - v0.0.12.
 **Discovered:** 2026-04-27 (git case via `command_injection`).
 **Generalized:** 2026-04-27 (sips case via `subprocess_shell_inject`).
-**Workaround:** affected bench tasks use the `phase_c_skip` flag.
+**Root cause:** Python 3.9's `_posixsubprocess` fork-exec helper
+opens `/dev/fd/` to enumerate inherited file descriptors and close
+them. Cuttle's SBPL didn't allow `/dev/fd` reads (only specific
+`/dev/null`, `/dev/random`, etc.), so `opendir("/dev/fd")` failed
+with EPERM and Python fell back to `_close_fds_by_brute_force`,
+which loops `close(fd)` from 3 to `RLIMIT_NOFILE`. Under the
+sandbox, `RLIMIT_NOFILE` was effectively unbounded, making the loop
+spin indefinitely at 99% CPU before the spawn could even fail.
+**Fix:** added `(subpath "/dev/fd")` to the `(allow file-read* ...)`
+block in `crates/cuttle-sandbox/src/profile.rs` so Python takes the
+fast path. Sandboxed `subprocess.run` of any non-allowlisted binary
+now returns `PermissionError: Operation not permitted` immediately
+instead of hanging.
+
+The rest of this doc is preserved as a record of the diagnosis path
+(stack-sample bisection via `sample(1)` against the spinning Python
+child) since the same technique applies to future SBPL regressions.
 
 **Filename note:** this file is named `sandbox-python-git-hang.md` for
 historical reasons; the issue is _not_ git-specific. Any binary that
