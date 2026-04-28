@@ -36,7 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
-    anthropic==0.39.0 \
+    anthropic==0.95.0 \
     pyyaml==6.0.2 \
     jinja2==3.1.4
 
