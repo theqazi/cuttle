@@ -1,0 +1,19 @@
+[package]
+name = "cuttle-review"
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Cuttle L4 verification gate. Runs model-generated code through an adversarial three-persona review (Spider-Man / Iron Man / Captain America) and surfaces severity-classified findings. Operator-blocking on CRITICAL is the harness mechanic the framework calls for in L4 (Verification Loop, paper §6). v0.0.1 ships the synchronous API + Anthropic-backed reviewer; multi-persona-parallel dispatch + skill-content lifting from ~/.claude/skills/code-review/ is v0.0.2+."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+cuttle-anthropic = { path = "../cuttle-anthropic" }
+cuttle-credential = { path = "../cuttle-credential" }
+
+[dev-dependencies]

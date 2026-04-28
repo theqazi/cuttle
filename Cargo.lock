@@ -244,6 +244,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuttle-review"
+version = "0.0.1"
+dependencies = [
+ "cuttle-anthropic",
+ "cuttle-credential",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "cuttle-rewardloop"
 version = "0.0.6"
 dependencies = [

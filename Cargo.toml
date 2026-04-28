@@ -13,6 +13,7 @@ members = [
     "crates/cuttle-anthropic",
     "crates/cuttle-sandbox",
     "crates/cuttle-telemetry",
+    "crates/cuttle-review",
     "crates/cuttle-cli",
 ]
 
@@ -51,6 +52,10 @@ eventsource-stream = "0.2"
 # behavior is the default; "Always Allow" toggle is captured via the
 # existing AuditEvent::KeychainAlwaysAllowToggled variant.
 security-framework = "3"
+# No-echo TTY input for `cuttle credential set`. ~600 LOC pure-Rust +
+# thin termios FFI; no curl, no curses. Used only by the credential-set
+# operator path; tests don't touch it.
+rpassword = "7"
 
 [profile.release]
 panic = "abort"
