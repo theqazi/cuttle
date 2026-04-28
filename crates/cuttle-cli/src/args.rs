@@ -136,6 +136,12 @@ pub enum ParseError {
     MissingCredentialSubcommand,
     #[error("unknown credential subcommand: {0}")]
     UnknownCredentialSubcommand(String),
+    #[error("invalid value for option {opt}: {value:?} (allowed: {allowed})")]
+    InvalidEnum {
+        opt: &'static str,
+        value: String,
+        allowed: &'static str,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -154,6 +160,57 @@ pub enum Command {
     CredentialSet(CredentialSetArgs),
     CredentialShow(CredentialShowArgs),
     CredentialDelete(CredentialDeleteArgs),
+    Review(ReviewArgs),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReviewThreshold {
+    /// Block when any CRITICAL finding is present (default).
+    Critical,
+    /// Block on HIGH or worse.
+    High,
+    /// Block on MEDIUM or worse.
+    Medium,
+    /// Block on any finding at all (LOW or worse).
+    Low,
+}
+
+impl Default for ReviewThreshold {
+    fn default() -> Self {
+        ReviewThreshold::Critical
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ReviewArgs {
+    /// Env var the API key is resolved from. Same default as ask /
+    /// session-start so operators don't have to remember a third name.
+    pub api_key_env: String,
+    /// Optional original task spec passed to the reviewer. Empty
+    /// string is acceptable; the reviewer flags defects against
+    /// general best practices in that case.
+    pub prompt: Option<String>,
+    /// Source for the code to review. v0.0.14 supports stdin only.
+    /// `--code-file <path>` is v0.0.15+.
+    pub source: PromptSource,
+    /// Block threshold; non-zero exit if any finding at this severity
+    /// or above is present.
+    pub threshold: ReviewThreshold,
+    /// Output format. False = human-readable; true = JSON array of
+    /// findings to stdout (suitable for piping to jq).
+    pub json: bool,
+}
+
+impl Default for ReviewArgs {
+    fn default() -> Self {
+        ReviewArgs {
+            api_key_env: "ANTHROPIC_API_KEY".to_string(),
+            prompt: None,
+            source: PromptSource::Stdin,
+            threshold: ReviewThreshold::default(),
+            json: false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -297,6 +354,12 @@ impl Cli {
                 let args = parse_ask_args(&mut iter)?;
                 Ok(Cli {
                     command: Command::Ask(args),
+                })
+            }
+            "review" => {
+                let args = parse_review_args(&mut iter)?;
+                Ok(Cli {
+                    command: Command::Review(args),
                 })
             }
             "audit" => {
@@ -455,6 +518,50 @@ where
         (false, Some(p)) => PromptSource::Inline(p),
         (false, None) => return Err(ParseError::MissingPrompt),
     };
+    Ok(args)
+}
+
+fn parse_review_args<'a, I>(iter: &mut I) -> Result<ReviewArgs, ParseError>
+where
+    I: Iterator<Item = &'a String>,
+{
+    let mut args = ReviewArgs::default();
+    while let Some(tok) = iter.next() {
+        match tok.as_str() {
+            "--api-key-env" => {
+                let val = iter
+                    .next()
+                    .ok_or(ParseError::MissingValue("--api-key-env"))?;
+                args.api_key_env = val.clone();
+            }
+            "--prompt" => {
+                let val = iter.next().ok_or(ParseError::MissingValue("--prompt"))?;
+                args.prompt = Some(val.clone());
+            }
+            "--threshold" => {
+                let val = iter.next().ok_or(ParseError::MissingValue("--threshold"))?;
+                args.threshold = match val.to_ascii_lowercase().as_str() {
+                    "critical" => ReviewThreshold::Critical,
+                    "high" => ReviewThreshold::High,
+                    "medium" => ReviewThreshold::Medium,
+                    "low" => ReviewThreshold::Low,
+                    other => {
+                        return Err(ParseError::InvalidEnum {
+                            opt: "--threshold",
+                            value: other.to_string(),
+                            allowed: "critical|high|medium|low",
+                        });
+                    }
+                };
+            }
+            "--json" => args.json = true,
+            "-h" | "--help" => return Err(ParseError::HelpRequested),
+            other => return Err(ParseError::UnknownOption(other.to_string())),
+        }
+    }
+    // v0.0.14 reads code from stdin only. Inline / file flags land
+    // alongside `--code-file` in v0.0.15.
+    args.source = PromptSource::Stdin;
     Ok(args)
 }
 

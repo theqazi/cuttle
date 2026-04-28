@@ -1,12 +1,12 @@
 [package]
 name = "cuttle-cli"
-version = "0.0.17"
+version = "0.0.18"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish = false
-description = "Cuttle top-level CLI binary. v0.0.17 adds --system flag to cuttle ask (mirrors session start), enabling apples-to-apples bench comparison with the direct-Anthropic-SDK arm in bench/."
+description = "Cuttle top-level CLI binary. v0.0.17 adds --system flag to cuttle ask (mirrors session start), enabling apples-to-apples bench comparison with the direct-Anthropic-SDK arm in bench/. v0.0.18 adds `cuttle review` subcommand: runs model-generated code through the L4 verification gate (cuttle-review v0.0.1, three-persona adversarial pass) and exits non-zero when any finding meets the operator-configured severity threshold."
 
 [[bin]]
 name = "cuttle"
@@ -28,6 +28,7 @@ cuttle-telemetry = { path = "../cuttle-telemetry" }
 cuttle-credential = { path = "../cuttle-credential" }
 cuttle-anthropic = { path = "../cuttle-anthropic" }
 cuttle-sandbox = { path = "../cuttle-sandbox" }
+cuttle-review = { path = "../cuttle-review" }
 
 [dev-dependencies]
 tempfile.workspace = true

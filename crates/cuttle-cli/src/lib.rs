@@ -26,6 +26,7 @@ pub mod audit_cmd;
 pub mod banner;
 pub mod credential_cmd;
 pub mod paths;
+pub mod review_cmd;
 pub mod sandbox_cmd;
 pub mod session_cmd;
 pub mod telemetry_cmd;
@@ -60,6 +61,9 @@ pub enum CliError {
 
     #[error("credential subcommand failed: {0}")]
     Credential(#[from] credential_cmd::CredentialCmdError),
+
+    #[error("review subcommand failed: {0}")]
+    Review(#[from] review_cmd::ReviewCmdError),
 }
 
 /// CLI entry point. `argv` should INCLUDE the program name as `argv[0]`,
@@ -154,6 +158,19 @@ pub fn run<W: Write, E: Write>(argv: &[String], stdout: &mut W, stderr: &mut E) 
             Ok(()) => 0,
             Err(e) => {
                 let _ = writeln!(stderr, "cuttle credential delete: {e}");
+                2
+            }
+        },
+        Command::Review(args) => match review_cmd::run(&args, stdout) {
+            // Exit code semantics for `cuttle review`:
+            //   blocked == false → 0 (passed the gate, output is safe to use)
+            //   blocked == true  → 1 (gate fired, caller should NOT
+            //                         use the reviewed code as-is)
+            //   error            → 2 (review didn't run)
+            Ok((_findings, false)) => 0,
+            Ok((_findings, true)) => 1,
+            Err(e) => {
+                let _ = writeln!(stderr, "cuttle review: {e}");
                 2
             }
         },
