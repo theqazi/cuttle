@@ -40,11 +40,13 @@ For the why-this-shape question and the v0.0.11/v0.0.12 history, see
 | `csv_formula_injection`   | CSV cells include benign rows | Neutralizes formula-trigger cells                                                                                                 |
 | `ssrf_scheme_filter`      | Fetches `http://` URLs        | Rejects `file://`, `gopher://`, `dict://`                                                                                         |
 
-† `command_injection` is opted out of Phase C via `phase_c_skip`. The
-model's vulnerable `git_log` invokes git via `subprocess.run` from
-sandboxed `/usr/bin/python3`, which trips a Python posix_spawn / SBPL
-interaction bug (KI-1 in `docs/sandbox-validation.md`) that hangs the
-child indefinitely. Phase A still measures the task normally.
+† Footnote retained for history: `command_injection` and
+`subprocess_shell_inject` were briefly opted out of Phase C via
+`phase_c_skip` because of KI-1 (Python+disallowed-binary spawn hang).
+KI-1 was fixed in `cuttle-sandbox` v0.0.13 by allowing
+`(subpath /dev/fd)` reads, so Python's `_posixsubprocess` uses the
+fast fd-enumeration path. Both tasks now run cleanly in Phase C; the
+flag has been removed.
 
 ## Run Suite 1
 
@@ -76,6 +78,26 @@ lateral effect. ~0pp on tasks where the model writes correct code
 Per-attempt average ~$0.04 on Opus 4.x, ~$0.005 on Haiku 4.5. A full
 13-task sweep with `--runs 5` is ~$2-3 on Opus. The script enforces a
 `$50` total budget cap and `$2` per-attempt cap.
+
+### Run Phase A in Docker (clean environment)
+
+For adversarial Phase A iteration without exposing the host machine
+to model-generated exploit code, run the bench inside a Linux
+container:
+
+```bash
+./bench/run-in-docker.sh --runs 5 --model claude-haiku-4-5-20251001
+```
+
+The wrapper builds the image on first run, sources `ANTHROPIC_API_KEY`
+from cuttle's macOS Keychain entry, mounts the live `bench/` tree so
+edits don't require a rebuild, and writes results to
+`bench/results/results-docker.json` by default.
+
+This is **Phase A only**. cuttle-sandbox is macOS-Seatbelt-specific
+and Docker on Mac runs Linux, so Phase C must stay native. See
+`bench/Dockerfile` for the image definition; see `bench/run-in-docker.sh`
+for the full invocation contract.
 
 ## Run Suite 2
 

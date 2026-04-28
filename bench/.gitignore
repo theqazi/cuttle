@@ -4,6 +4,7 @@
 results*.json
 harness-results.json
 *.cache.json
+results/
 
 # Python build artifacts
 __pycache__/
