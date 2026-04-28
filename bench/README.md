@@ -99,6 +99,34 @@ and Docker on Mac runs Linux, so Phase C must stay native. See
 `bench/Dockerfile` for the image definition; see `bench/run-in-docker.sh`
 for the full invocation contract.
 
+### Run as a Harbor agent (cuttle on standard benchmarks)
+
+`bench/harbor_agents/cuttle_agent.py` registers a `CuttleAgent`
+that's accepted by [Harbor](https://www.harborframework.com/) as
+`--agent-import-path bench.harbor_agents.cuttle_agent:CuttleAgent`.
+It's a thin subclass of Harbor's stock `claude-code` agent that:
+
+- Sources `ANTHROPIC_API_KEY` from cuttle's macOS Keychain entry
+  (no `export ANTHROPIC_API_KEY=...` needed before invoking).
+- Writes one JSONL audit line per trial start + end at
+  `<job>/<trial>/agent/cuttle-audit.jsonl`.
+
+```bash
+pipx install harbor
+PYTHONPATH="$(git rev-parse --show-toplevel)" harbor run \
+  -d "cookbook/test" \
+  --agent-import-path bench.harbor_agents.cuttle_agent:CuttleAgent \
+  -m "anthropic/claude-haiku-4-5-20251001" \
+  --env docker
+```
+
+This is **Phase A semantics**: the agent runs in Harbor's Linux
+container, so cuttle-sandbox's macOS-Seatbelt SBPL is _not_ in
+the loop. Putting cuttle's containment in a Harbor-evaluated
+loop requires a custom `CuttleEnvironment(BaseEnvironment)`
+that runs commands on the macOS host through `cuttle sandbox
+run`; that's tracked as Option 2 and not yet implemented.
+
 ## Run Suite 2
 
 No API key, no model. Just runs.

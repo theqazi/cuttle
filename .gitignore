@@ -2,3 +2,8 @@ target/
 Cargo.lock.bak
 *.swp
 .DS_Store
+
+# Harbor's per-job output dir; can land at repo root when `harbor run`
+# is invoked from there. The bench/ subdir has its own .gitignore that
+# also covers jobs/ for runs invoked from bench/.
+jobs/
