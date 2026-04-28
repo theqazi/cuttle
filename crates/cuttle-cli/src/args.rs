@@ -163,9 +163,10 @@ pub enum Command {
     Review(ReviewArgs),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub enum ReviewThreshold {
     /// Block when any CRITICAL finding is present (default).
+    #[default]
     Critical,
     /// Block on HIGH or worse.
     High,
@@ -173,12 +174,6 @@ pub enum ReviewThreshold {
     Medium,
     /// Block on any finding at all (LOW or worse).
     Low,
-}
-
-impl Default for ReviewThreshold {
-    fn default() -> Self {
-        ReviewThreshold::Critical
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
